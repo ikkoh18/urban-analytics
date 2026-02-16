@@ -1,0 +1,23 @@
+# Core data manipulation
+pandas
+numpy
+
+# HTTP requests
+requests
+
+# Environment variables
+python-dotenv
+
+# Weather data
+meteostat
+
+# Date and time utilities
+python-dateutil
+
+# Optional (visualization later)
+matplotlib
+seaborn
+
+# Optional (database future use)
+sqlalchemy
+psycopg2-binary
