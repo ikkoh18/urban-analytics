@@ -11,6 +11,7 @@ __pycache__/
 # Ignore raw crime and weather data
 data/raw/crime/
 data/raw/weather/
+data/raw/traffic/
 
 # Ignore processed data (opcional, mas recomendado)
 data/processed/
