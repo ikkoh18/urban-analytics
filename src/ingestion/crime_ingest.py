@@ -29,7 +29,7 @@ def fetch_all_crime_data():
 
         data = response.json()
 
-        if not data:
+        if not data: 
             break
 
         all_records.extend(data)
