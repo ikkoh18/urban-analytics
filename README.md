@@ -54,6 +54,9 @@ urban-analytics/
 │   │   ├── traffic/
 │   │   └── weather/
 │   └── processed/
+|       ├── crime/
+│       ├── traffic/
+│       └── weather/
 │
 ├── docs/
 ├── src/
