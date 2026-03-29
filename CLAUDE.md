@@ -1,7 +1,7 @@
 # CLAUDE.md — Urban Analytics System – Los Angeles
 
 > Arquivo de contexto para Claude Code / Claude Cowork.
-> Gerado a partir do README oficial + contexto do projeto.
+> Atualizado com a camada de apresentação (Flutter app + dashboard).
 
 ---
 
@@ -11,12 +11,10 @@ Sistema de **análise urbana orientado a dados**, focado em Los Angeles, que int
 
 **Caso de uso principal:** uma pessoa do Brasil viajando para Los Angeles usa o sistema para entender padrões de tráfego, pontos críticos de criminalidade e janelas de risco por horário — sem conhecer a cidade.
 
-O sistema analisa dados históricos e gera insights sobre:
+O sistema é composto por dois módulos principais:
 
-- quais áreas têm **maior incidência de crimes**
-- quais horários concentram **tráfego intenso**
-- como o **clima impacta o congestionamento**
-- quando evitar certas áreas ou horários de deslocamento
+1. **Pipeline de dados** — ingestão, limpeza, integração e analytics em Python
+2. **App mobile Flutter** — mapa interativo + dashboard analítico como camada de apresentação
 
 ---
 
@@ -44,7 +42,7 @@ O sistema analisa dados históricos e gera insights sobre:
 
 ---
 
-## Arquitetura do Pipeline
+## Arquitetura do Sistema
 
 ```
 Fontes Públicas (Crime API · PeMS · Meteostat)
@@ -58,7 +56,11 @@ Fontes Públicas (Crime API · PeMS · Meteostat)
        Camada de Analytics
     agregações · correlações · métricas
               ↓
-    Insights & Recomendações
+         Backend API
+    FastAPI ou Firebase (a definir)
+              ↓
+       App Flutter (mobile)
+    Mapa interativo · Dashboard analítico
 ```
 
 ---
@@ -89,6 +91,12 @@ urban-analytics/
 │   ├── analytics/
 │   └── config/
 │       └── settings.py
+├── app/                          # App Flutter (a criar)
+│   ├── lib/
+│   │   ├── data/                 # Modelos, repositórios, chamadas à API
+│   │   ├── domain/               # Casos de uso, score de risco
+│   │   └── presentation/         # Widgets, telas, BLoCs
+│   └── pubspec.yaml
 ├── notebooks/
 │   └── exploration.ipynb
 ├── docs/
@@ -101,22 +109,70 @@ urban-analytics/
 
 ---
 
-## Setup do Ambiente
+## App Flutter
+
+### Visão Geral
+- Framework: **Flutter** (Android + iOS, base de código única)
+- Padrão de arquitetura: **BLoC** (Business Logic Component)
+- Navegação: bottom navigation bar com duas telas principais
+
+### Telas
+| Tela | Descrição |
+|---|---|
+| Mapa interativo | Dados georeferenciados com 4 camadas e filtros |
+| Dashboard analítico | Gráficos de crime, tráfego e correlações |
+
+### Mapa — Camadas disponíveis
+- Heatmap de densidade criminal (lat/lon dos registros do LAPD)
+- Fluxo de tráfego nas vias (velocidade média por segmento, dados PeMS)
+- Alertas de risco por horário (combinação crime + congestionamento)
+- Camada de clima/chuva (precipitação e temperatura Meteostat)
+
+Todas as camadas são habilitáveis/desabilitáveis individualmente. Filtros por faixa horária e dia da semana. Ao tocar em uma região: score de risco em 3 níveis (reduzido / moderado / elevado).
+
+### Dashboard — Blocos
+- **Crime:** distribuição de ocorrências por hora do dia + tendência semanal
+- **Tráfego:** curva de fluxo veicular + velocidade média por faixa horária
+- **Correlações:** precipitação vs velocidade média · criminalidade vs tráfego por hora
+
+Seletor de período no topo: dia da semana, mês ou faixa de datas personalizada.
+
+### Recomendações e Predições
+Módulo de previsão futura — camada mais avançada do app:
+
+- **Predição de tráfego:** modelos SARIMA ou Prophet treinados sobre séries horárias de fluxo e velocidade, capturando sazonalidade semanal e diária
+- **Predição de risco:** regressão ou gradient boosting cruzando horário, dia da semana, temperatura e precipitação para estimar probabilidade de ocorrências por área
+- **Recomendações contextuais:** sugestões práticas em linguagem simples — melhor horário para atravessar uma região, rotas alternativas em dias de chuva, alertas de janelas horárias críticas por bairro
+- Os modelos são treinados no backend; o app consome apenas as predições finais via API, sem processamento local
+
+### Pacotes Flutter previstos
+| Pacote | Uso |
+|---|---|
+| `flutter_map` | Renderização do mapa com tiles OpenStreetMap |
+| `fl_chart` | Gráficos do dashboard |
+| `flutter_bloc` | Gerenciamento de estado BLoC |
+| `dio` | Chamadas HTTP à API (se FastAPI) |
+
+### Backend (a definir após M4)
+Opções em avaliação:
+- **FastAPI + PostgreSQL** — API REST centralizada, lógica analítica no servidor
+- **Firebase** — sincronização de dados pré-processados, infraestrutura simplificada
+
+A decisão será tomada após conhecer o volume e frequência de atualização do `urban_dataset_2025.csv`.
+
+---
+
+## Setup do Ambiente Python
 
 ```bash
-# 1. Clonar o repositório
 git clone <url-do-repositorio>
 cd urban-analytics
-
-# 2. Criar e ativar ambiente virtual
 python -m venv .venv
 source .venv/bin/activate        # macOS/Linux
 # .venv\Scripts\Activate         # Windows PowerShell
-
-# 3. Instalar dependências
 pip install -r requirements.txt
 
-# 4. Criar arquivo .env na raiz
+# Arquivo .env na raiz:
 CRIME_API_URL=https://data.lacity.org/resource/2nrs-mtv8.json
 CRIME_API_LIMIT=50000
 ```
@@ -133,59 +189,51 @@ CRIME_API_LIMIT=50000
 
 ---
 
-## Tarefas Pendentes
+## Tarefas Pendentes — Pipeline
 
 ### Tarefa 1 — Limpeza dos dados de crime
 **Script:** `src/processing/clean_crime.py`
 **Output:** `data/processed/crime/crime_2020_2025_clean.csv`
 
 ```python
-# Combinar date_occ + time_occ em timestamp
 df['time_str'] = df['time_occ'].astype(str).str.zfill(4)
 df['timestamp'] = pd.to_datetime(
     df['date_occ'] + ' ' + df['time_str'],
     format='%m/%d/%Y %H%M'
 )
-# Colunas finais: timestamp, crm_cd_desc, vict_age, vict_sex,
-#                 weapon_used_cd, lat, lon, area_name
-# Remover linhas com lat == 0 (geocódigos inválidos)
+# Colunas: timestamp, crm_cd_desc, vict_age, vict_sex,
+#          weapon_used_cd, lat, lon, area_name
+# Remover lat == 0
 ```
-
----
 
 ### Tarefa 2 — Limpeza dos dados de clima
 **Script:** `src/processing/clean_weather.py`
 **Output:** `data/processed/weather/weather_2025_clean.csv`
 
-- Manter: `time` → `timestamp`, `temp` → `temperature`, `prcp` → `precipitation`
+- `time` → `timestamp`, `temp` → `temperature`, `prcp` → `precipitation`
 - Preencher lacunas de precipitação com `0`
-
----
 
 ### Tarefa 3 — Agregação horária
 
-**Crime:**
 ```python
+# Crime
 crime_hourly = df.groupby(
     pd.Grouper(key='timestamp', freq='H')
 ).size().reset_index(name='crime_count')
+
+# Tráfego: total_flow (soma), avg_speed (média) por hora
 ```
 
-**Tráfego:** agregar todas as estações por hora → `total_flow` (soma), `avg_speed` (média)
-
----
-
-### Tarefa 4 — Integração dos datasets
+### Tarefa 4 — Integração
 **Script:** `src/processing/integrate_datasets.py`
 **Output:** `data/processed/urban_dataset_2025.csv`
 
-Estrutura esperada:
 ```
 timestamp | crime_count | traffic_flow | avg_speed | temperature | precipitation
 ```
 
 - Outer join nos três datasets via `timestamp`
-- Forward-fill para clima (muda lentamente)
+- Forward-fill para clima
 
 ---
 
@@ -199,18 +247,7 @@ timestamp | crime_count | traffic_flow | avg_speed | temperature | precipitation
 | M4 — Integração | `urban_dataset_2025.csv` | ⏳ Pendente |
 | M5 — Analytics exploratória | Notebook de correlações | ⏳ Pendente |
 | M6 — Indicadores de risco | Regras de recomendação | ⏳ Pendente |
-| M7 — Dashboard / visualização | Entregável final | ⏳ Pendente |
-
----
-
-## Análises Planejadas (pós-integração)
-
-- Horários de pico de tráfego por área
-- Correlação entre chuva e congestionamento
-- Correlação entre tráfego e criminalidade
-- Indicadores de risco urbano por área e horário
-- Regras de recomendação baseadas em evidências
-- Dashboard interativo de visualização
+| M7 — App Flutter + backend | Mapa + dashboard mobile | ⏳ Pendente |
 
 ---
 
@@ -225,16 +262,3 @@ timestamp | crime_count | traffic_flow | avg_speed | temperature | precipitation
 | Fuso horário | `America/Los_Angeles` (quando aplicável) |
 | Ambiente virtual | `.venv` na raiz |
 | Variáveis de ambiente | arquivo `.env` (não versionar) |
-
----
-
-## Objetivo Final
-
-Este projeto demonstra um pipeline de engenharia de dados profissional com:
-
-- design de pipeline multicamada (RAW → Processing → Analytics)
-- integração de múltiplas fontes públicas
-- análise temporal e espacial
-- suporte a decisões baseadas em evidências urbanas
-
-É um sistema de inteligência urbana — não apenas um dashboard.
