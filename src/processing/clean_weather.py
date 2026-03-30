@@ -11,9 +11,9 @@ def main():
     output_dir = BASE_DIR / "data" / "processed" / "weather"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_file = output_dir / "weather_2025_clean.csv"
+    output_file = output_dir / "weather_2020_2025_clean.csv"
 
-    raw_file = next(raw_dir.glob("*.csv"))
+    raw_file = raw_dir / "weather_hourly_2020_2025.csv"
     print(f"Reading {raw_file.name}")
 
     df = pd.read_csv(raw_file)

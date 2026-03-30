@@ -3,15 +3,17 @@ from pathlib import Path
 import meteostat as ms
 import pandas as pd
 
+from meteostat import config
 from src.config.settings import BASE_DIR
 
 
 def main():
+    config.block_large_requests = False
     print("Fetching hourly weather data...")
 
     point = ms.Point(34.0522, -118.2437)
 
-    start = datetime(2025, 1, 1)
+    start = datetime(2020, 1, 1)
     end = datetime(2025, 12, 31)
 
     stations = ms.stations.nearby(point, limit=5)
@@ -28,7 +30,7 @@ def main():
     weather_dir = BASE_DIR / "data" / "raw" / "weather"
     weather_dir.mkdir(parents=True, exist_ok=True)
 
-    output_file = weather_dir / "weather_hourly_2025.csv"
+    output_file = weather_dir / "weather_hourly_2020_2025.csv"
     df.to_csv(output_file, index=False)
 
     print("Weather data saved successfully.")
