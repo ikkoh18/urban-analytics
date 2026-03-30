@@ -42,7 +42,7 @@ def main():
     # --- Weather: already hourly ---
     print("Loading weather data...")
     weather = pd.read_csv(
-        processed_dir / "weather" / "weather_2025_clean.csv",
+        processed_dir / "weather" / "weather_2020_2025_clean.csv",
         usecols=["timestamp", "temperature", "precipitation"],
     )
     weather["timestamp"] = pd.to_datetime(weather["timestamp"], errors="coerce")
