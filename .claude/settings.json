@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -u -c \":*)"
+      "Bash(python -u -c \":*)",
+      "Bash(flutter create:*)",
+      "Bash(flutter analyze:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\ikkoh\\Desktop\\projeto_comp_1\\urban-analytics\\app\\lib\\core"
     ]
   }
 }
