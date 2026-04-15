@@ -17,6 +17,8 @@ python-dateutil
 # Optional (visualization later)
 matplotlib
 seaborn
+scipy
+scikit-learn
 
 # Optional (database future use)
 sqlalchemy
