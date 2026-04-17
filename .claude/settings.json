@@ -3,7 +3,12 @@
     "allow": [
       "Bash(python -u -c \":*)",
       "Bash(flutter create:*)",
-      "Bash(flutter analyze:*)"
+      "Bash(flutter analyze:*)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter run:*)",
+      "Read(//c/Users/ikkoh/AppData/Local/Pub/Cache/hosted/pub.dev/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\ikkoh\\Desktop\\projeto_comp_1\\urban-analytics\\app\\lib\\core"

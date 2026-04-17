@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' hide MapController;
-import 'package:latlong2/latlong2.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/layout/app_scaffold.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_drawer.dart';
@@ -179,8 +179,7 @@ class _MapPageState extends State<MapPage> {
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
                       trackHeight: 2,
-                      thumbRadius: 8,
-                      overlayRadius: 14,
+                      thumbSize: const MaterialStatePropertyAll(Size.fromRadius(8)),
                       activeTrackColor: AppTheme.teal,
                       inactiveTrackColor: AppTheme.muted,
                       thumbColor: AppTheme.teal,
