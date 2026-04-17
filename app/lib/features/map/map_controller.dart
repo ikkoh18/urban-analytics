@@ -5,7 +5,8 @@ class MapController extends ChangeNotifier {
   bool showTrafficLayer = true;
   bool showWeatherLayer = false;
   bool showRiskLayer    = false;
-  int selectedHour      = 12;
+  int selectedHour      = 18;
+  String selectedPeriod = 'Hoje';
 
   void toggleLayer(String layer) {
     switch (layer) {
@@ -27,6 +28,11 @@ class MapController extends ChangeNotifier {
 
   void setHour(int hour) {
     selectedHour = hour;
+    notifyListeners();
+  }
+
+  void setPeriod(String period) {
+    selectedPeriod = period;
     notifyListeners();
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/app_scaffold.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_drawer.dart';
 import 'dashboard_controller.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -30,6 +31,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       currentIndex: 1,
+      drawer: const AppDrawer(currentRoute: '/dashboard'),
       body: const Center(
         child: Text(
           'Dashboard — em desenvolvimento',
