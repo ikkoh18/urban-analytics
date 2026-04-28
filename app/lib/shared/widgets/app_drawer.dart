@@ -47,24 +47,18 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
+
           const _SectionLabel('Navegação'),
-          _NavItem(
-            icon: Icons.map,
-            label: 'Mapa interativo',
-            route: '/',
-            currentRoute: currentRoute,
-          ),
-          _NavItem(
-            icon: Icons.bar_chart,
-            label: 'Dashboard',
-            route: '/dashboard',
-            currentRoute: currentRoute,
-          ),
+          _NavItem(icon: Icons.map,              label: 'Mapa interativo',  route: '/',           currentRoute: currentRoute),
+          _NavItem(icon: Icons.bar_chart,         label: 'Dashboard',        route: '/dashboard',  currentRoute: currentRoute),
+          _NavItem(icon: Icons.smart_toy_outlined,label: 'Assistente',       route: '/assistant',  currentRoute: currentRoute),
+
           const Divider(color: AppTheme.card, thickness: 1),
           const _SectionLabel('Análise'),
-          const _StaticItem(icon: Icons.access_time, label: 'Horários de risco'),
-          const _StaticItem(icon: Icons.cloud, label: 'Previsão do tempo'),
-          const _StaticItem(icon: Icons.layers, label: 'Score de risco'),
+          _NavItem(icon: Icons.access_time,    label: 'Horários de risco',  route: '/analysis/risk-times',    currentRoute: currentRoute),
+          _NavItem(icon: Icons.cloud_outlined, label: 'Previsão de risco',  route: '/analysis/risk-forecast', currentRoute: currentRoute),
+          _NavItem(icon: Icons.layers,         label: 'Score de risco',     route: '/analysis/risk-score',    currentRoute: currentRoute),
+
           const Divider(color: AppTheme.card, thickness: 1),
           const _SectionLabel('App'),
           const _StaticItem(icon: Icons.info_outline, label: 'Sobre o projeto'),
@@ -112,7 +106,11 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = currentRoute == route;
     return ListTile(
-      leading: Icon(icon, color: isActive ? AppTheme.teal : AppTheme.muted, size: 20),
+      leading: Icon(
+        icon,
+        color: isActive ? AppTheme.teal : AppTheme.muted,
+        size: 20,
+      ),
       title: Text(
         label,
         style: TextStyle(
@@ -136,17 +134,13 @@ class _NavItem extends StatelessWidget {
 class _StaticItem extends StatelessWidget {
   final IconData icon;
   final String label;
-
   const _StaticItem({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: AppTheme.muted, size: 20),
-      title: Text(
-        label,
-        style: const TextStyle(color: AppTheme.muted, fontSize: 14),
-      ),
+      title: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 14)),
       dense: true,
       onTap: () {},
     );
