@@ -1,19 +1,31 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:latlong2/latlong.dart';
 import '../../data/models/urban_zone_model.dart';
 import '../../data/models/traffic_segment_model.dart';
+import '../../data/repositories/api_repository.dart';
 
 class MapController extends ChangeNotifier {
+  final _api = ApiRepository();
+
   bool showCrimeLayer   = true;
   bool showTrafficLayer = true;
   bool showWeatherLayer = false;
   bool showRiskLayer    = false;
 
-  String selectedPeriod = 'week'; // 'today', 'week', 'month'
+  String selectedPeriod = 'week';
   int selectedHour = 18;
 
   UrbanZone? selectedZone;
 
+  bool isLoading = false;
+  bool hasRain   = false;
+
+  // Dados carregados da API — fallback local se API indisponível
+  List<WeightedLatLng>  _apiHeatmapPoints   = [];
+  List<TrafficSegment>  _apiTrafficSegments = [];
+
+  // ── Zonas (mantidas localmente — são contexto, não dados brutos) ─────────
   final List<UrbanZone> zones = const [
     UrbanZone(
       name: 'Hollywood',
@@ -57,89 +69,121 @@ class MapController extends ChangeNotifier {
     ),
   ];
 
-  // Pontos para heatmap: weight normalizado de 0.0 a 1.0 pelo riskScore.
-  List<({LatLng position, double weight})> get heatmapPoints =>
-      zones
-          .map((z) => (position: z.position, weight: z.riskScore / 10.0))
-          .toList();
+  // ── Heatmap — dados reais da API ─────────────────────────────────────────
 
-  final List<TrafficSegment> trafficSegments = const [
+  List<WeightedLatLng> get heatmapPoints => _apiHeatmapPoints;
+
+  // ── Segmentos de tráfego ─────────────────────────────────────────────────
+
+  List<TrafficSegment> get trafficSegments =>
+      _apiTrafficSegments.isNotEmpty ? _apiTrafficSegments : _localTrafficSegments;
+
+  final List<TrafficSegment> _localTrafficSegments = const [
     TrafficSegment(
       name: 'Hollywood Blvd',
       points: [
-        LatLng(34.1018, -118.4430),
-        LatLng(34.1016, -118.4100),
-        LatLng(34.1013, -118.3800),
-        LatLng(34.1011, -118.3500),
-        LatLng(34.1008, -118.3200),
-        LatLng(34.1003, -118.2980),
-      ],
-      avgSpeed: 18,
-    ),
-    TrafficSegment(
-      name: 'Sunset Blvd',
-      points: [
-        LatLng(34.0885, -118.4600),
-        LatLng(34.0915, -118.4000),
-        LatLng(34.0936, -118.3600),
-        LatLng(34.0958, -118.3200),
-        LatLng(34.0832, -118.2800),
-        LatLng(34.0764, -118.2510),
-      ],
-      avgSpeed: 25,
-    ),
-    TrafficSegment(
-      name: 'Santa Monica Blvd',
-      points: [
-        LatLng(34.0743, -118.4980),
-        LatLng(34.0751, -118.4500),
-        LatLng(34.0752, -118.4000),
-        LatLng(34.0758, -118.3600),
-        LatLng(34.0760, -118.3200),
-      ],
-      avgSpeed: 38,
-    ),
-    TrafficSegment(
-      name: 'I-101 Hollywood Fwy',
-      points: [
-        LatLng(34.0534, -118.2508),
-        LatLng(34.0620, -118.2630),
-        LatLng(34.0730, -118.2800),
-        LatLng(34.0860, -118.3020),
-        LatLng(34.0960, -118.3170),
-        LatLng(34.1028, -118.3290),
+        LatLng(34.1016, -118.3398), LatLng(34.1007, -118.3272),
+        LatLng(34.0993, -118.3195), LatLng(34.0984, -118.3101),
+        LatLng(34.0974, -118.3017), LatLng(34.0966, -118.2943),
       ],
       avgSpeed: 12,
     ),
     TrafficSegment(
+      name: 'Sunset Blvd',
+      points: [
+        LatLng(34.0836, -118.2697), LatLng(34.0847, -118.2779),
+        LatLng(34.0858, -118.2836), LatLng(34.0869, -118.2901),
+        LatLng(34.0881, -118.2968),
+      ],
+      avgSpeed: 28,
+    ),
+    TrafficSegment(
+      name: 'Santa Monica Blvd',
+      points: [
+        LatLng(34.0900, -118.3621), LatLng(34.0901, -118.3534),
+        LatLng(34.0902, -118.3447), LatLng(34.0903, -118.3360),
+        LatLng(34.0905, -118.3272),
+      ],
+      avgSpeed: 45,
+    ),
+    TrafficSegment(
+      name: 'I-101 Hollywood Fwy',
+      points: [
+        LatLng(34.1013, -118.3398), LatLng(34.0897, -118.3287),
+        LatLng(34.0784, -118.3013), LatLng(34.0671, -118.2836),
+        LatLng(34.0558, -118.2694), LatLng(34.0518, -118.2568),
+      ],
+      avgSpeed: 10,
+    ),
+    TrafficSegment(
       name: 'I-110 Harbor Fwy',
       points: [
-        LatLng(33.8800, -118.2176),
-        LatLng(33.9100, -118.2156),
-        LatLng(33.9400, -118.2152),
-        LatLng(33.9650, -118.2170),
-        LatLng(33.9900, -118.2290),
-        LatLng(34.0200, -118.2420),
-        LatLng(34.0430, -118.2585),
+        LatLng(34.0558, -118.2568), LatLng(34.0231, -118.2606),
+        LatLng(33.9981, -118.2683), LatLng(33.9731, -118.2761),
+        LatLng(33.9358, -118.2761),
       ],
-      avgSpeed: 30,
+      avgSpeed: 34,
+    ),
+    TrafficSegment(
+      name: 'I-10 Santa Monica Fwy',
+      points: [
+        LatLng(34.0184, -118.4912), LatLng(34.0231, -118.4352),
+        LatLng(34.0275, -118.3791), LatLng(34.0319, -118.3230),
+        LatLng(34.0363, -118.2764), LatLng(34.0407, -118.2468),
+      ],
+      avgSpeed: 8,
+    ),
+    TrafficSegment(
+      name: 'Wilshire Blvd',
+      points: [
+        LatLng(34.0603, -118.4437), LatLng(34.0612, -118.4150),
+        LatLng(34.0621, -118.3863), LatLng(34.0630, -118.3576),
+        LatLng(34.0585, -118.3126), LatLng(34.0558, -118.2900),
+      ],
+      avgSpeed: 22,
+    ),
+    TrafficSegment(
+      name: 'Vermont Ave',
+      points: [
+        LatLng(34.1013, -118.2919), LatLng(34.0784, -118.2919),
+        LatLng(34.0558, -118.2919), LatLng(34.0275, -118.2919),
+      ],
+      avgSpeed: 40,
     ),
   ];
 
+  // ── API loading ──────────────────────────────────────────────────────────
+
+  Future<void> loadMapData(int hour) async {
+    isLoading = true;
+    notifyListeners();
+
+    final results = await Future.wait([
+      _api.fetchHeatmapPoints(hour),
+      _api.fetchTrafficSegments(hour),
+      _api.fetchWeatherForMap(hour),
+    ]);
+
+    final points   = results[0] as List<WeightedLatLng>;
+    final segments = results[1] as List<TrafficSegment>;
+    final weather  = results[2] as Map<String, dynamic>?;
+
+    if (points.isNotEmpty)   _apiHeatmapPoints   = points;
+    if (segments.isNotEmpty) _apiTrafficSegments = segments;
+    if (weather != null)     hasRain = weather['has_rain'] as bool? ?? false;
+
+    isLoading = false;
+    notifyListeners();
+  }
+
+  // ── State ────────────────────────────────────────────────────────────────
+
   void toggleLayer(String layer) {
     switch (layer) {
-      case 'crime':
-        showCrimeLayer = !showCrimeLayer;
-        break;
-      case 'traffic':
-        showTrafficLayer = !showTrafficLayer;
-        break;
-      case 'weather':
-        showWeatherLayer = !showWeatherLayer;
-        break;
-      case 'risk':
-        showRiskLayer = !showRiskLayer;
-        break;
+      case 'crime':   showCrimeLayer   = !showCrimeLayer;
+      case 'traffic': showTrafficLayer = !showTrafficLayer;
+      case 'weather': showWeatherLayer = !showWeatherLayer;
+      case 'risk':    showRiskLayer    = !showRiskLayer;
     }
     notifyListeners();
   }
@@ -152,10 +196,17 @@ class MapController extends ChangeNotifier {
   void setHour(int hour) {
     selectedHour = hour;
     notifyListeners();
+    loadMapData(hour); // recarrega ao mudar horário
   }
 
   void selectZone(UrbanZone? zone) {
     selectedZone = zone;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _api.dispose();
+    super.dispose();
   }
 }

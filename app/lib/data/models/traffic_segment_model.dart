@@ -18,5 +18,5 @@ class TrafficSegment {
     return const Color(0xFF1E88A8);                    // azul    — fluindo
   }
 
-  double get strokeWidth => avgSpeed < 35 ? 6.0 : 4.0;
+  double get strokeWidth => avgSpeed < 35 ? 5.0 : 3.5;
 }

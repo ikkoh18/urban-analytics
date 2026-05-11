@@ -25,6 +25,7 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _ctrl = DashboardController();
     _ctrl.addListener(() => setState(() {}));
+    _ctrl.loadData();
   }
 
   @override
@@ -144,7 +145,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: BarChart(
             BarChartData(
               barGroups: List.generate(24, (i) {
-                final v = DashboardController.crimeByHour[i];
+                final v = _ctrl.crimeByHour[i];
                 return BarChartGroupData(
                   x: i,
                   barRods: [
@@ -217,42 +218,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 10),
-        ...DashboardController.crimeByNeighborhood.entries.map((e) {
-          final c = e.value >= 7.5 ? _kRed : (e.value >= 5 ? _kOrange : _kGreen);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 80,
-                  child: Text(e.key,
-                      style: const TextStyle(
-                          color: AppTheme.offwhite, fontSize: 12)),
-                ),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: e.value / 10.0,
-                      backgroundColor: AppTheme.card,
-                      valueColor: AlwaysStoppedAnimation<Color>(c),
-                      minHeight: 10,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  e.value.toStringAsFixed(1),
-                  style: TextStyle(
-                    color: c,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+        ..._buildAreaRows(),
       ],
     );
   }
@@ -273,7 +239,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: BarChart(
             BarChartData(
               barGroups: List.generate(24, (i) {
-                final v = DashboardController.speedByHour[i];
+                final v = _ctrl.speedByHour[i];
                 return BarChartGroupData(
                   x: i,
                   barRods: [
@@ -473,6 +439,59 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       ],
     );
+  }
+
+  // ── Ranking de bairros ─────────────────────────────────────────────
+  List<Widget> _buildAreaRows() {
+    // Usa dados da API se disponíveis, caso contrário usa fallback estático.
+    final areas = _ctrl.crimeByArea.isNotEmpty
+        ? _ctrl.crimeByArea
+        : const [
+            {'name': 'Downtown',  'total': 84000},
+            {'name': 'Hollywood', 'total': 81000},
+            {'name': 'Compton',    'total': 76000},
+            {'name': 'Venice',    'total': 52000},
+            {'name': 'Pasadena',  'total': 28000},
+          ];
+
+    final maxTotal = areas
+        .map((e) => (e['total'] as num).toDouble())
+        .reduce((a, b) => a > b ? a : b);
+
+    return areas.map((e) {
+      final name  = e['name'] as String;
+      final total = (e['total'] as num).toDouble();
+      final ratio = maxTotal > 0 ? total / maxTotal : 0.0;
+      final c = ratio >= 0.75 ? _kRed : (ratio >= 0.5 ? _kOrange : _kGreen);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 80,
+              child: Text(name,
+                  style: const TextStyle(color: AppTheme.offwhite, fontSize: 12)),
+            ),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  backgroundColor: AppTheme.card,
+                  valueColor: AlwaysStoppedAnimation<Color>(c),
+                  minHeight: 10,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              total.toStringAsFixed(0),
+              style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' hide MapController;
+import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/layout/app_scaffold.dart';
 import '../../core/theme/app_theme.dart';
@@ -27,6 +28,8 @@ class _MapPageState extends State<MapPage> {
     super.initState();
     _controller = MapController();
     _controller.addListener(_onUpdate);
+    // Carrega dados reais da API na inicialização
+    _controller.loadMapData(_controller.selectedHour);
     // Lê argumento 'selectedZone' enviado pelo AssistantPage ("Ver no mapa").
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments;
@@ -79,6 +82,16 @@ class _MapPageState extends State<MapPage> {
                 _buildLayerChips(),
                 if (_controller.selectedZone != null)
                   _buildTooltip(_controller.selectedZone!),
+                if (_controller.isLoading)
+                  const Positioned(
+                    top: 12,
+                    right: 12,
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -145,7 +158,7 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  // ── FlutterMap: heatmap de crime + tráfego + marcadores ───────────────
+  // ── FlutterMap: heatmap de crime + tráfego + marcadores tocáveis ───────
   Widget _buildMap() {
     return FlutterMap(
       options: const MapOptions(
@@ -158,49 +171,41 @@ class _MapPageState extends State<MapPage> {
           userAgentPackageName: 'com.urbananalytics',
         ),
 
-        // ── Seção 2: Heatmap de crime (círculos concêntricos com falloff) ─
-        if (_controller.showCrimeLayer)
-          CircleLayer(circles: _buildHeatmapCircles()),
+        // ── Heatmap de crime com dados reais (gradiente azul → vermelho) ───
+        if (_controller.showCrimeLayer && _controller.heatmapPoints.isNotEmpty)
+          HeatMapLayer(
+            heatMapDataSource: InMemoryHeatMapDataSource(
+              data: _controller.heatmapPoints,
+            ),
+            heatMapOptions: HeatMapOptions(
+              gradient: {
+                0.0:  Colors.green,
+                0.25: Colors.green,
+                0.5:  Colors.yellow,
+                0.75: Colors.orange,
+                1.0:  Colors.red,
+              },
+              minOpacity: 0.6,
+              radius: 45.0,
+              blurFactor: 0.6,
+              layerOpacity: 1.0,
+            ),
+          ),
 
-        // ── Seção 3: Tráfego estilo Google Maps ───────────────────────────
+        // ── Linhas de tráfego estilo Google Maps ──────────────────────────
         if (_controller.showTrafficLayer)
           PolylineLayer(polylines: _buildTrafficPolylines()),
 
-        // ── Labels de bairro (sempre visíveis) ────────────────────────────
+        // ── Marcadores transparentes para interatividade (sem labels) ─────
         MarkerLayer(
           markers: _controller.zones.map((zone) {
-            final isSelected = _controller.selectedZone == zone;
             return Marker(
               point: zone.position,
-              width: 104,
-              height: 28,
+              width: 88,
+              height: 88,
               child: GestureDetector(
                 onTap: () => _controller.selectZone(zone),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.navy,
-                    borderRadius: BorderRadius.circular(4),
-                    border: isSelected
-                        ? Border.all(color: AppTheme.teal, width: 1.5)
-                        : null,
-                  ),
-                  child: Text(
-                    zone.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+                child: Container(color: Colors.transparent),
               ),
             );
           }).toList(),
@@ -209,53 +214,15 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  // Gera 4 círculos concêntricos por zona para efeito de gradiente radial.
-  List<CircleMarker> _buildHeatmapCircles() {
-    final s = _circleOpacity / 0.35; // fator de escala relativo ao default
-    return _controller.zones.expand((zone) {
-      final c = zone.riskColor;
-      return [
-        CircleMarker(
-          point: zone.position,
-          radius: zone.radius * 0.4,
-          useRadiusInMeter: true,
-          color: c.withValues(alpha: (0.52 * s).clamp(0.0, 1.0)),
-          borderStrokeWidth: 0,
-        ),
-        CircleMarker(
-          point: zone.position,
-          radius: zone.radius,
-          useRadiusInMeter: true,
-          color: c.withValues(alpha: (0.26 * s).clamp(0.0, 1.0)),
-          borderStrokeWidth: 0,
-        ),
-        CircleMarker(
-          point: zone.position,
-          radius: zone.radius * 1.8,
-          useRadiusInMeter: true,
-          color: c.withValues(alpha: (0.13 * s).clamp(0.0, 1.0)),
-          borderStrokeWidth: 0,
-        ),
-        CircleMarker(
-          point: zone.position,
-          radius: zone.radius * 3.0,
-          useRadiusInMeter: true,
-          color: c.withValues(alpha: (0.05 * s).clamp(0.0, 1.0)),
-          borderStrokeWidth: 0,
-        ),
-      ];
-    }).toList();
-  }
-
-  // Gera polylines coloridas por velocidade para cada segmento de tráfego.
+  // Gera polylines coloridas por velocidade com borda estilo Google Maps.
   List<Polyline> _buildTrafficPolylines() {
     return _controller.trafficSegments.map((seg) {
       return Polyline(
         points: seg.points,
         color: seg.lineColor,
         strokeWidth: seg.strokeWidth,
-        borderColor: Colors.black.withValues(alpha: 0.35),
-        borderStrokeWidth: 1.5,
+        borderColor: Colors.black45,
+        borderStrokeWidth: 2.0,
         strokeCap: StrokeCap.round,
         strokeJoin: StrokeJoin.round,
       );

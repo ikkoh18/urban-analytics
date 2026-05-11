@@ -8,7 +8,22 @@
       "Bash(flutter doctor:*)",
       "Bash(flutter pub:*)",
       "Bash(flutter run:*)",
-      "Read(//c/Users/ikkoh/AppData/Local/Pub/Cache/hosted/pub.dev/**)"
+      "Read(//c/Users/ikkoh/AppData/Local/Pub/Cache/hosted/pub.dev/**)",
+      "Bash(findstr heatmap *)",
+      "Bash(dart pub *)",
+      "Bash(python -c ' *)",
+      "Bash(find \"/mnt/c/Users/ikkoh/Desktop/projeto_comp_1/urban-analytics/data/raw/traffic\" -type f -name \"*meta*\" -o -name \"*station*\")",
+      "Read(//mnt/c/Users/ikkoh/Desktop/projeto_comp_1/urban-analytics/data/raw/**)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ikkoh\\\\Desktop\\\\projeto_comp_1\\\\urban-analytics\\\\backend\\\\routers\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ikkoh\\\\Desktop\\\\projeto_comp_1\\\\urban-analytics\\\\backend\\\\services\")",
+      "Bash(Write-Output \"ok\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ikkoh\\\\Desktop\\\\projeto_comp_1\\\\urban-analytics\\\\backend\\\\routers\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ikkoh\\\\Desktop\\\\projeto_comp_1\\\\urban-analytics\\\\backend\\\\services\")",
+      "PowerShell(Invoke-RestMethod \"http://localhost:8000/\" 2>&1)",
+      "PowerShell(Stop-Process -Id 26264 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell($h = Invoke-RestMethod \"http://localhost:8000/health\"; $h.PSObject.Properties | ForEach-Object { Write-Output \"$\\($_.Name\\): rows=$\\($_.Value.rows\\), cols=$\\($_.Value.columns.Count\\)\" })",
+      "PowerShell(cd \"c:\\\\Users\\\\ikkoh\\\\Desktop\\\\projeto_comp_1\\\\urban-analytics\\\\backend\"; $proc = Start-Process -FilePath \"python\" -ArgumentList \"-m\", \"uvicorn\", \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\", \"--log-level\", \"error\" -PassThru -WindowStyle Hidden; Write-Output \"PID: $\\($proc.Id\\)\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\ikkoh\\Desktop\\projeto_comp_1\\urban-analytics\\app\\lib\\core"
