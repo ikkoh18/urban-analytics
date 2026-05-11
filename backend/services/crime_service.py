@@ -10,6 +10,24 @@ _df = _df[_df["timestamp"].dt.year >= 2022].copy()
 _df["hour"] = _df["timestamp"].dt.hour
 _df["date"] = _df["timestamp"].dt.date
 
+# ── Diagnóstico de inicialização ─────────────────────────────────────────────
+print("=== crime_service diagnóstico ===")
+print(f"Anos disponíveis:  {sorted(_df['timestamp'].dt.year.unique().tolist())}")
+print(f"Total de registros (pós-2022): {len(_df)}")
+_hora20 = _df[_df["hour"] == 20]
+_cells20 = (
+    _hora20.dropna(subset=["lat", "lon"])
+    .pipe(lambda df: df[(df["lat"] != 0) & (df["lon"] != 0)])
+    .assign(lat_r=lambda df: df["lat"].round(2), lon_r=lambda df: df["lon"].round(2))
+    .groupby(["lat_r", "lon_r"])
+    .size()
+    .sort_values(ascending=False)
+)
+print(f"\nTop 10 células (hora 20):\n{_cells20.head(10)}")
+print(f"\nPercentis distribuição (hora 20):\n{_cells20.describe(percentiles=[.5, .75, .85, .90, .95])}")
+del _hora20, _cells20
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Percentis globais por (date, hour) para classificação de risco
 _global_counts = _df.groupby(["date", "hour"]).size()
 _P33 = float(_global_counts.quantile(0.33))
@@ -25,7 +43,12 @@ _CRIME_MAX = float(_area_daily["cnt"].max()) if not _area_daily.empty else 1.0
 
 
 def get_heatmap_points(hour: int, day_of_week: str | None = None) -> list[dict]:
-    """Retorna até 800 pontos de heatmap normalizados para o horário dado."""
+    """Retorna até 1000 pontos normalizados por ranking percentual.
+
+    Cada célula recebe o percentual de células que ela supera em contagem
+    de crimes. A célula mais perigosa fica sempre com weight=1.0,
+    independente dos valores absolutos.
+    """
     mask = _df["hour"] == hour
     sub = _df[mask]
 
@@ -51,10 +74,15 @@ def get_heatmap_points(hour: int, day_of_week: str | None = None) -> list[dict]:
         .reset_index(name="count")
     )
 
-    max_count = grouped["count"].max()
-    grouped["weight"] = grouped["count"] / max_count
-    grouped = grouped[grouped["weight"] >= 0.008]
-    grouped = grouped.nlargest(1500, "weight")
+    if grouped.empty:
+        return []
+
+    # Ranking percentual: cada célula recebe o percentual de células que ela supera
+    grouped["weight"] = grouped["count"].rank(pct=True)
+
+    # Mantém apenas as 70% mais perigosas (rank >= 0.30)
+    grouped = grouped[grouped["weight"] >= 0.30]
+    grouped = grouped.nlargest(1000, "weight")
 
     return [
         {"lat": row.lat_r, "lon": row.lon_r, "weight": round(row.weight, 4)}
