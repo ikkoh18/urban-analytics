@@ -14,18 +14,7 @@ _df["date"] = _df["timestamp"].dt.date
 print("=== crime_service diagnóstico ===")
 print(f"Anos disponíveis:  {sorted(_df['timestamp'].dt.year.unique().tolist())}")
 print(f"Total de registros (pós-2022): {len(_df)}")
-_hora20 = _df[_df["hour"] == 20]
-_cells20 = (
-    _hora20.dropna(subset=["lat", "lon"])
-    .pipe(lambda df: df[(df["lat"] != 0) & (df["lon"] != 0)])
-    .assign(lat_r=lambda df: df["lat"].round(2), lon_r=lambda df: df["lon"].round(2))
-    .groupby(["lat_r", "lon_r"])
-    .size()
-    .sort_values(ascending=False)
-)
-print(f"\nTop 10 células (hora 20):\n{_cells20.head(10)}")
-print(f"\nPercentis distribuição (hora 20):\n{_cells20.describe(percentiles=[.5, .75, .85, .90, .95])}")
-del _hora20, _cells20
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Percentis globais por (date, hour) para classificação de risco
@@ -41,51 +30,75 @@ _area_daily = (
 )
 _CRIME_MAX = float(_area_daily["cnt"].max()) if not _area_daily.empty else 1.0
 
+# ── Cache de heatmap pré-computado para as 24 horas ─────────────────────────
+# Computed once at startup so /crime/heatmap responds in <50ms instead of timing out.
 
-def get_heatmap_points(hour: int, day_of_week: str | None = None) -> list[dict]:
-    """Retorna até 1000 pontos normalizados por ranking percentual.
-
-    Cada célula recebe o percentual de células que ela supera em contagem
-    de crimes. A célula mais perigosa fica sempre com weight=1.0,
-    independente dos valores absolutos.
-    """
-    mask = _df["hour"] == hour
-    sub = _df[mask]
-
-    if day_of_week:
-        dow_map = {
-            "monday": 0, "tuesday": 1, "wednesday": 2,
-            "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
-        }
-        dow = dow_map.get(day_of_week.lower())
-        if dow is not None:
-            sub = sub[sub["timestamp"].dt.dayofweek == dow]
-
+def _compute_heatmap_for_hour(hour: int) -> list[dict]:
+    sub = _df[_df["hour"] == hour]
     if sub.empty:
         return []
-
     sub = sub.dropna(subset=["lat", "lon"])
     sub = sub[(sub["lat"] != 0) & (sub["lon"] != 0)]
-
     grouped = (
         sub.assign(lat_r=sub["lat"].round(2), lon_r=sub["lon"].round(2))
         .groupby(["lat_r", "lon_r"])
         .size()
         .reset_index(name="count")
     )
-
     if grouped.empty:
         return []
-
-    # Ranking percentual: cada célula recebe o percentual de células que ela supera
     grouped["weight"] = grouped["count"].rank(pct=True)
-
-    # Mantém apenas as 70% mais perigosas (rank >= 0.30)
     grouped = grouped[grouped["weight"] >= 0.30]
     grouped = grouped.nlargest(1000, "weight")
-
     return [
-        {"lat": row.lat_r, "lon": row.lon_r, "weight": round(row.weight, 4)}
+        {"lat": float(row.lat_r), "lon": float(row.lon_r), "weight": round(float(row.weight), 4)}
+        for row in grouped.itertuples()
+    ]
+
+
+print("Pré-computando heatmap para 24 horas...", flush=True)
+_heatmap_cache: dict[int, list[dict]] = {}
+for _h in range(24):
+    _heatmap_cache[_h] = _compute_heatmap_for_hour(_h)
+
+print(f"Heatmap cache pronto — ex. hora 14: {len(_heatmap_cache[14])} pontos", flush=True)
+
+
+def get_heatmap_points(hour: int, day_of_week: str | None = None) -> list[dict]:
+    """Retorna até 1000 pontos normalizados por ranking percentual.
+
+    Sem day_of_week: usa cache pré-computado (resposta <50ms).
+    Com day_of_week: filtra na hora (mais lento, aceitável para uso eventual).
+    """
+    if day_of_week is None:
+        return _heatmap_cache.get(hour, [])
+
+    # Filtro por dia da semana — computed on-the-fly
+    dow_map = {
+        "monday": 0, "tuesday": 1, "wednesday": 2,
+        "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+    }
+    dow = dow_map.get(day_of_week.lower())
+    sub = _df[_df["hour"] == hour]
+    if dow is not None:
+        sub = sub[sub["timestamp"].dt.dayofweek == dow]
+    if sub.empty:
+        return []
+    sub = sub.dropna(subset=["lat", "lon"])
+    sub = sub[(sub["lat"] != 0) & (sub["lon"] != 0)]
+    grouped = (
+        sub.assign(lat_r=sub["lat"].round(2), lon_r=sub["lon"].round(2))
+        .groupby(["lat_r", "lon_r"])
+        .size()
+        .reset_index(name="count")
+    )
+    if grouped.empty:
+        return []
+    grouped["weight"] = grouped["count"].rank(pct=True)
+    grouped = grouped[grouped["weight"] >= 0.30]
+    grouped = grouped.nlargest(1000, "weight")
+    return [
+        {"lat": float(row.lat_r), "lon": float(row.lon_r), "weight": round(float(row.weight), 4)}
         for row in grouped.itertuples()
     ]
 

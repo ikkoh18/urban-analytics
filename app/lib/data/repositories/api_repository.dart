@@ -4,12 +4,13 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import '../models/traffic_segment_model.dart';
 import '../models/risk_score_model.dart';
+import '../models/weather_current_model.dart';
 
-// Android emulator: 10.0.2.2 — iOS simulator: localhost
-// Sobrescreva via: flutter run --dart-define=API_BASE_URL=http://localhost:8000
+// Web/Chrome: localhost:8000 (default)
+// Android emulator: flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 const _kBase = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000',
+  defaultValue: 'http://localhost:8000',
 );
 
 class ApiRepository {
@@ -18,7 +19,7 @@ class ApiRepository {
   Future<Map<String, dynamic>?> _get(String path) async {
     try {
       final uri = Uri.parse('$_kBase$path');
-      final res = await _client.get(uri).timeout(const Duration(seconds: 10));
+      final res = await _client.get(uri).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>?;
       }
@@ -29,7 +30,7 @@ class ApiRepository {
   Future<List<dynamic>?> _getList(String path) async {
     try {
       final uri = Uri.parse('$_kBase$path');
-      final res = await _client.get(uri).timeout(const Duration(seconds: 10));
+      final res = await _client.get(uri).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as List<dynamic>?;
       }
@@ -96,6 +97,12 @@ class ApiRepository {
 
   Future<Map<String, dynamic>?> fetchWeatherForMap(int hour) async {
     return _get('/weather/map?hour=$hour');
+  }
+
+  Future<WeatherCurrent> fetchWeatherCurrent(int hour) async {
+    final data = await _get('/weather/current?hour=$hour');
+    if (data == null) return WeatherCurrent.fallback(hour);
+    return WeatherCurrent.fromJson(data);
   }
 
   Future<List<double>> fetchPrecipitationByHour() async {

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color navy     = Color(0xFF0D1B2A);
-  static const Color teal     = Color(0xFF1E88A8);
-  static const Color orange   = Color(0xFFF4821E);
-  static const Color offwhite = Color(0xFFE8EEF4);
-  static const Color muted    = Color(0xFF8FA8BF);
-  static const Color card     = Color(0xFF162232);
+  static const Color navy   = Color(0xFF0a0f1e);
+  static const Color teal   = Color(0xFF00e5a0);
+  static const Color amber  = Color(0xFFffaa00);
+  static const Color red    = Color(0xFFff5555);
+  static const Color blue   = Color(0xFF5bb8ff);
+  static const Color card   = Color(0xFF131929);
+  static const Color border = Color(0x14ffffff); // rgba(255,255,255,0.08)
 
   static ThemeData get darkTheme => ThemeData(
     brightness: Brightness.dark,
@@ -14,18 +15,12 @@ class AppTheme {
     primaryColor: teal,
     colorScheme: const ColorScheme.dark(
       primary: teal,
-      secondary: orange,
+      secondary: amber,
       surface: card,
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: navy,
-      foregroundColor: offwhite,
       elevation: 0,
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: navy,
-      selectedItemColor: teal,
-      unselectedItemColor: muted,
     ),
   );
 }
