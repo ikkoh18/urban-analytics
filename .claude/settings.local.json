@@ -5,7 +5,10 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Roberto Ikkoh Takeda\\\\Desktop\\\\projeto_eng_comp\\\\urban-analytics\\\\app\\\\lib\" -Recurse -File)",
       "Bash(Select-Object FullName)",
       "Bash(Sort-Object FullName)",
-      "PowerShell(Get-Command fvm, flutter -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Command fvm, flutter -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Recurse -Path \"C:\\\\Users\\\\Roberto Ikkoh Takeda\\\\Desktop\\\\projeto_eng_comp\\\\urban-analytics\\\\app\\\\lib\" -Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Roberto Ikkoh Takeda\\\\Desktop\\\\projeto_eng_comp\\\\urban-analytics\\\\app\\\\lib\" -Recurse)",
+      "Bash(xargs grep -l \"AppTheme\\\\.\\\\\\(offwhite\\\\|orange\\\\|muted\\\\\\)\")"
     ]
   }
 }

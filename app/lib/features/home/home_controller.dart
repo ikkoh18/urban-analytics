@@ -9,12 +9,15 @@ import '../../data/models/risk_score_model.dart';
 import '../../data/models/traffic_segment_model.dart';
 import '../../data/models/weather_current_model.dart';
 
-const _kAnthropicKey =
-    String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
+const _kGeminiKey =
+    String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+
+const _kGeminiBase =
+    'https://generativelanguage.googleapis.com/v1beta/models';
 
 enum AppPhase { selection, result }
 
-enum TimePeriod { now, tonight, weekend }
+enum DayType { weekday, weekend }
 
 // ── Coordenadas centrais LAPD ─────────────────────────────────────────────────
 const _kAreaLatLng = <String, LatLng>{
@@ -40,6 +43,18 @@ const _kAreaLatLng = <String, LatLng>{
   'TOPANGA':     LatLng(34.1959, -118.6087),
 };
 
+// ── Bairros turísticos ────────────────────────────────────────────────────────
+final _kTouristAreas = <Map<String, dynamic>>[
+  {'name': 'Beverly Hills',          'lat': 34.0736, 'lng': -118.4004, 'lapd': 'WILSHIRE'},
+  {'name': 'Santa Monica',           'lat': 34.0195, 'lng': -118.4912, 'lapd': 'PACIFIC'},
+  {'name': 'Venice Beach',           'lat': 33.9850, 'lng': -118.4695, 'lapd': 'PACIFIC'},
+  {'name': 'Hollywood',              'lat': 34.0928, 'lng': -118.3287, 'lapd': 'HOLLYWOOD'},
+  {'name': 'Koreatown',              'lat': 34.0580, 'lng': -118.3020, 'lapd': 'WILSHIRE'},
+  {'name': 'Silver Lake',            'lat': 34.0869, 'lng': -118.2698, 'lapd': 'NORTHEAST'},
+  {'name': 'Malibu',                 'lat': 34.0259, 'lng': -118.7798, 'lapd': 'PACIFIC'},
+  {'name': 'Downtown Arts District', 'lat': 34.0407, 'lng': -118.2348, 'lapd': 'CENTRAL'},
+];
+
 const _kLACenter = LatLng(34.0522, -118.2437);
 
 String formatAreaName(String raw) => raw
@@ -53,41 +68,58 @@ class HomeController extends ChangeNotifier {
   final _api = ApiRepository();
   final _client = http.Client();
 
-  AppPhase phase = AppPhase.selection;
-  TimePeriod timePeriod = TimePeriod.now;
-  bool isPt = true;
+  AppPhase phase    = AppPhase.selection;
+  DayType  dayType  = DayType.weekday;
+  int  selectedHour = DateTime.now().hour;
+  bool isNowMode    = true;
+  bool isPt         = true;
 
   // ── Estado 1 ─────────────────────────────────────────────────────────────────
   bool isLoadingAreas = false;
-  bool hasError = false;
+  bool hasError       = false;
   List<Map<String, dynamic>> areas = [];
-  Map<String, String> riskBadges = {};
+  Map<String, String> riskBadges   = {};
   String searchQuery = '';
 
   // ── Mapa (ambos os estados) ───────────────────────────────────────────────────
-  List<WeightedLatLng> heatmapPoints = [];
+  List<WeightedLatLng> heatmapPoints   = [];
   List<TrafficSegment> trafficSegments = [];
 
   // ── Estado 2 ─────────────────────────────────────────────────────────────────
-  String? selectedArea;
-  bool isLoadingResult = false;
+  String?        selectedArea;
+  bool           isLoadingResult = false;
   RiskScoreModel? riskScore;
-  double? avgSpeed;
+  double?         avgSpeed;
   WeatherCurrent? weather;
-  String? aiResponse;
-  bool isLoadingAI = false;
+  String?         aiResponse;
+  bool            isLoadingAI = false;
+
+  // ── Clima em tempo real (Gemini) ──────────────────────────────────────────────
+  double? geminiTempC;
+  String? geminiCondition;   // ex: "Sunny", "Partly Cloudy"
+  bool    isLoadingGeminiWeather = false;
+
+  // ── Chat ─────────────────────────────────────────────────────────────────────
+  List<Map<String, String>> chatHistory = [];
+  bool    isChatLoading = false;
+  String? _contextMsg;
 
   // ── Getters ──────────────────────────────────────────────────────────────────
-  int get currentHour {
-    switch (timePeriod) {
-      case TimePeriod.now:     return DateTime.now().hour;
-      case TimePeriod.tonight: return 21;
-      case TimePeriod.weekend: return 15;
-    }
-  }
+  int get currentHour => isNowMode ? DateTime.now().hour : selectedHour;
 
-  LatLng get areaLatLng =>
-      _kAreaLatLng[selectedArea?.toUpperCase()] ?? _kLACenter;
+  List<Map<String, dynamic>> get touristAreas => _kTouristAreas;
+
+  LatLng get areaLatLng {
+    for (final t in _kTouristAreas) {
+      if (t['name'] == selectedArea) {
+        return LatLng(
+          (t['lat'] as num).toDouble(),
+          (t['lng'] as num).toDouble(),
+        );
+      }
+    }
+    return _kAreaLatLng[selectedArea?.toUpperCase()] ?? _kLACenter;
+  }
 
   List<Map<String, dynamic>> get filteredAreas {
     if (searchQuery.isEmpty) return areas;
@@ -97,14 +129,25 @@ class HomeController extends ChangeNotifier {
         .toList();
   }
 
+  /// Retorna a área LAPD de referência para cálculo de risco.
+  /// Para bairros turísticos usa o campo 'lapd'; para áreas LAPD retorna o
+  /// próprio nome.
+  String _riskAreaFor(String name) {
+    for (final t in _kTouristAreas) {
+      if (t['name'] == name) return t['lapd'] as String;
+    }
+    return name;
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     isPt = prefs.getBool('isPt') ?? true;
 
     isLoadingAreas = true;
-    hasError = false;
+    hasError       = false;
     notifyListeners();
+
     try {
       areas = await _api.fetchCrimeByArea();
       debugPrint('[init] fetchCrimeByArea → ${areas.length} áreas');
@@ -117,16 +160,16 @@ class HomeController extends ChangeNotifier {
       debugPrint('[init] ERROR fetchCrimeByArea: $e');
       hasError = true;
     }
+
     isLoadingAreas = false;
     notifyListeners();
-    // Carrega heatmap + tráfego em background, independente do resultado das áreas
     loadMapLayers(currentHour);
   }
 
   Future<void> retryInit() async {
     areas = [];
     riskBadges.clear();
-    heatmapPoints = [];
+    heatmapPoints   = [];
     trafficSegments = [];
     await init();
   }
@@ -143,6 +186,8 @@ class HomeController extends ChangeNotifier {
         }
       } catch (_) {}
     }
+    // Bairros turísticos herdam o badge da área LAPD de referência —
+    // já carregado pelo loop acima; não é necessária chamada extra.
   }
 
   // ── Camadas do mapa ──────────────────────────────────────────────────────────
@@ -162,104 +207,268 @@ class HomeController extends ChangeNotifier {
 
   // ── Selecionar bairro ────────────────────────────────────────────────────────
   Future<void> selectArea(String area) async {
-    selectedArea = area;
+    selectedArea   = area;
     isLoadingResult = true;
-    aiResponse = null;
-    phase = AppPhase.result;
+    aiResponse     = null;
+    chatHistory    = [];
+    _contextMsg    = null;
+    geminiTempC    = null;
+    geminiCondition = null;
+    phase          = AppPhase.result;
     notifyListeners();
 
-    final hour = currentHour;
+    final hour     = currentHour;
+    final riskArea = _riskAreaFor(area);
+
     try {
       final results = await Future.wait([
-        _api.fetchRiskScore(area, hour),
+        _api.fetchRiskScore(riskArea, hour),
         _api.fetchSpeedByHour(),
         _api.fetchWeatherCurrent(hour),
       ]);
-      riskScore    = results[0] as RiskScoreModel?;
-      final speeds = results[1] as List<double>;
-      weather      = results[2] as WeatherCurrent;
+      riskScore       = results[0] as RiskScoreModel?;
+      final speeds    = results[1] as List<double>;
+      weather         = results[2] as WeatherCurrent;
       avgSpeed = (speeds.isNotEmpty && hour < speeds.length)
           ? speeds[hour]
           : null;
-      debugPrint('[selectArea] riskScore=${riskScore?.riskLevel} '
-          'avgSpeed=$avgSpeed '
-          'weather=${weather?.temperature}°C');
+      debugPrint('[selectArea] riskArea=$riskArea riskScore=${riskScore?.riskLevel} '
+          'avgSpeed=$avgSpeed weather=${weather?.temperature}°C');
     } catch (e) {
       debugPrint('[selectArea] ERROR: $e');
     }
 
     isLoadingResult = false;
     notifyListeners();
+    // Carrega IA e clima em tempo real em paralelo
     _loadAI();
+    _fetchGeminiWeather(area);
   }
 
-  // ── Chamada à API Anthropic ──────────────────────────────────────────────────
-  Future<void> _loadAI() async {
-    isLoadingAI = true;
-    notifyListeners();
-    try {
-      aiResponse = _kAnthropicKey.isEmpty
-          ? _fallback()
-          : await _callClaude();
-    } catch (_) {
-      aiResponse = _fallback();
-    }
-    isLoadingAI = false;
-    notifyListeners();
-  }
-
-  Future<String> _callClaude() async {
+  // ── Contexto para a IA ───────────────────────────────────────────────────────
+  String _buildContextMsg() {
     final area  = formatAreaName(selectedArea ?? '');
     final hour  = currentHour;
-    final score = riskScore?.riskScore ?? 0.0;
+    final level = riskScore?.riskLevel ?? 'low';
     final speed = avgSpeed ?? 0.0;
     final temp  = weather?.temperature ?? 20.0;
     final rain  = weather?.precipitation ?? 0.0;
 
-    final sysPrompt = isPt
-        ? 'Você é um morador experiente de Los Angeles. Responda como um local, '
-          'em linguagem natural e amigável. Nunca use linguagem técnica, números '
-          'de score ou termos como "risco alto". Seja direto e útil. '
-          'Máximo 3 frases + 1 dica prática em destaque.'
-        : 'You are an experienced Los Angeles local. Respond naturally and '
-          'friendly, like a trusted neighbor. Never use technical language, '
-          'score numbers, or terms like "high risk". Be direct and helpful. '
-          'Max 3 sentences + 1 practical tip highlighted.';
+    final dayStr = dayType == DayType.weekend
+        ? (isPt ? 'fim de semana' : 'weekend')
+        : (isPt ? 'dia de semana' : 'weekday');
 
-    final userMsg = isPt
-        ? 'Bairro: $area, Horário: ${hour}h, Score de risco: '
-          '${score.toStringAsFixed(1)}, Velocidade média: '
-          '${speed.toStringAsFixed(0)}mph, Temperatura: '
-          '${temp.toStringAsFixed(0)}°C, Chuva: ${rain.toStringAsFixed(1)}mm'
-        : 'Neighborhood: $area, Hour: ${hour}h, Risk score: '
-          '${score.toStringAsFixed(1)}, Average speed: '
-          '${speed.toStringAsFixed(0)}mph, Temperature: '
-          '${temp.toStringAsFixed(0)}°C, Rain: ${rain.toStringAsFixed(1)}mm';
+    final safetyLabel = switch (level) {
+      'high'   => isPt ? 'alto'     : 'high',
+      'medium' => isPt ? 'moderado' : 'moderate',
+      _        => isPt ? 'baixo'    : 'low',
+    };
+    final trafficLabel = speed < 20
+        ? (isPt ? 'parado'  : 'stopped')
+        : speed < 40
+            ? (isPt ? 'lento'   : 'slow')
+            : (isPt ? 'fluindo' : 'flowing');
 
-    final res = await _client.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
-      headers: {
-        'x-api-key': _kAnthropicKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: jsonEncode({
-        'model': 'claude-sonnet-4-20250514',
-        'max_tokens': 350,
-        'system': sysPrompt,
-        'messages': [
-          {'role': 'user', 'content': userMsg}
-        ],
-      }),
-    ).timeout(const Duration(seconds: 20));
+    final rainPart = rain > 0
+        ? (isPt
+            ? ', Chuva: ${rain.toStringAsFixed(1)}mm'
+            : ', Rain: ${rain.toStringAsFixed(1)}mm')
+        : '';
 
+    return isPt
+        ? 'Bairro: $area, Horário: ${hour}h, Dia: $dayStr, '
+          'Nível de segurança: $safetyLabel, Trânsito: $trafficLabel, '
+          'Temperatura: ${temp.toStringAsFixed(0)}°C$rainPart'
+        : 'Neighborhood: $area, Hour: ${hour}h, Day: $dayStr, '
+          'Safety level: $safetyLabel, Traffic: $trafficLabel, '
+          'Temperature: ${temp.toStringAsFixed(0)}°C$rainPart';
+  }
+
+  String _sysPrompt() => isPt
+      ? 'Você é um morador experiente de Los Angeles. Responda como um local, '
+        'em linguagem natural e amigável. Nunca use linguagem técnica, números '
+        'de score ou termos como "risco alto". Seja direto e útil. '
+        'Máximo 3 frases + 1 dica prática em destaque.'
+      : 'You are an experienced Los Angeles local. Respond naturally and '
+        'friendly, like a trusted neighbor. Never use technical language, '
+        'score numbers, or terms like "high risk". Be direct and helpful. '
+        'Max 3 sentences + 1 practical tip highlighted.';
+
+  // ── Gemini — helpers ─────────────────────────────────────────────────────────
+
+  /// Converte lista de mensagens no formato interno para o formato Gemini.
+  /// Roles: 'user' → 'user', 'assistant' → 'model'
+  List<Map<String, dynamic>> _toGeminiContents(
+      List<Map<String, String>> msgs) {
+    return msgs
+        .map((m) => {
+              'role': m['role'] == 'assistant' ? 'model' : 'user',
+              'parts': [
+                {'text': m['content'] ?? ''}
+              ],
+            })
+        .toList();
+  }
+
+  /// Extrai o texto da resposta do Gemini.
+  String _parseGeminiResponse(http.Response res) {
     if (res.statusCode == 200) {
-      final data    = jsonDecode(res.body) as Map<String, dynamic>;
-      final content = data['content'] as List<dynamic>;
-      return (content[0] as Map<String, dynamic>)['text'] as String;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final candidates = data['candidates'] as List<dynamic>;
+      final parts =
+          (candidates[0]['content']['parts'] as List<dynamic>);
+      return (parts[0] as Map<String, dynamic>)['text'] as String;
     }
-    return _fallback();
+    debugPrint('[gemini] error ${res.statusCode}: ${res.body}');
+    throw Exception('Gemini API error: ${res.statusCode}');
+  }
+
+  // ── Chamada à API Gemini ──────────────────────────────────────────────────────
+  Future<void> _loadAI() async {
+    isLoadingAI = true;
+    chatHistory = [];
+    _contextMsg = _buildContextMsg();
+    notifyListeners();
+
+    String response;
+    try {
+      response = _kGeminiKey.isEmpty ? _fallback() : await _callGemini();
+    } catch (_) {
+      response = _fallback();
+    }
+
+    chatHistory = [{'role': 'assistant', 'content': response}];
+    aiResponse  = response;
+    isLoadingAI = false;
+    notifyListeners();
+  }
+
+  Future<String> _callGemini() async {
+    final url =
+        '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
+    final res = await _client
+        .post(
+          Uri.parse(url),
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode({
+            'system_instruction': {
+              'parts': [{'text': _sysPrompt()}]
+            },
+            'contents': [
+              {
+                'role': 'user',
+                'parts': [{'text': _contextMsg ?? _buildContextMsg()}]
+              }
+            ],
+            'generationConfig': {'maxOutputTokens': 400},
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    return _parseGeminiResponse(res);
+  }
+
+  // ── Clima em tempo real via Gemini ────────────────────────────────────────────
+  Future<void> _fetchGeminiWeather(String area) async {
+    if (_kGeminiKey.isEmpty) return;
+    isLoadingGeminiWeather = true;
+    notifyListeners();
+
+    try {
+      final areaName = formatAreaName(area);
+      final prompt =
+          'What is the current weather in $areaName, Los Angeles right now? '
+          'Reply in JSON only, no markdown:\n'
+          '{"temp_c": 22, "condition": "Sunny", "humidity": 65}';
+
+      final url =
+          '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
+      final res = await _client
+          .post(
+            Uri.parse(url),
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({
+              'contents': [
+                {
+                  'role': 'user',
+                  'parts': [{'text': prompt}]
+                }
+              ],
+              'generationConfig': {'maxOutputTokens': 100},
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final raw = _parseGeminiResponse(res);
+      // Remove possível markdown code block (```json ... ```)
+      final cleaned = raw
+          .replaceAll(RegExp(r'```[a-z]*\n?'), '')
+          .replaceAll('```', '')
+          .trim();
+      final json = jsonDecode(cleaned) as Map<String, dynamic>;
+      geminiTempC     = (json['temp_c'] as num?)?.toDouble();
+      geminiCondition = json['condition'] as String?;
+      debugPrint('[gemini weather] ${geminiTempC}°C · $geminiCondition');
+    } catch (e) {
+      debugPrint('[gemini weather] ERROR: $e');
+    }
+
+    isLoadingGeminiWeather = false;
+    notifyListeners();
+  }
+
+  // ── Chat livre ───────────────────────────────────────────────────────────────
+  Future<void> sendChatMessage(String text) async {
+    if (text.trim().isEmpty) return;
+
+    chatHistory = List<Map<String, String>>.from(chatHistory)
+      ..add({'role': 'user', 'content': text});
+    isChatLoading = true;
+    notifyListeners();
+
+    String reply;
+    try {
+      reply = _kGeminiKey.isEmpty
+          ? (isPt
+              ? 'Configure a chave GEMINI_API_KEY para respostas ao vivo.'
+              : 'Set up your GEMINI_API_KEY for live responses.')
+          : await _callGeminiChat();
+    } catch (_) {
+      reply = isPt
+          ? 'Não consegui responder agora. Tente novamente.'
+          : "Couldn't respond right now. Please try again.";
+    }
+
+    chatHistory = List<Map<String, String>>.from(chatHistory)
+      ..add({'role': 'assistant', 'content': reply});
+    isChatLoading = false;
+    notifyListeners();
+  }
+
+  Future<String> _callGeminiChat() async {
+    // Histórico completo: contexto inicial + conversa exibida
+    final contents = _toGeminiContents([
+      {'role': 'user', 'content': _contextMsg ?? _buildContextMsg()},
+      ...chatHistory,
+    ]);
+
+    final url =
+        '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
+    final res = await _client
+        .post(
+          Uri.parse(url),
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode({
+            'system_instruction': {
+              'parts': [{'text': _sysPrompt()}]
+            },
+            'contents': contents,
+            'generationConfig': {'maxOutputTokens': 400},
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    return _parseGeminiResponse(res);
   }
 
   String _fallback() {
@@ -290,7 +499,7 @@ class HomeController extends ChangeNotifier {
       final safety = level == 'high'
           ? 'This time in $area can be busy. Stick to well-lit areas and use a rideshare.'
           : level == 'medium'
-              ? 'It\'s a decent time to visit $area — just stay aware of your surroundings.'
+              ? "It's a decent time to visit $area — just stay aware of your surroundings."
               : 'All good in $area at this hour. Great time to explore the neighborhood!';
       final traffic = speed < 20
           ? 'Traffic is heavy right now.'
@@ -308,19 +517,40 @@ class HomeController extends ChangeNotifier {
 
   // ── Ações ─────────────────────────────────────────────────────────────────────
   void back() {
-    phase = AppPhase.selection;
-    selectedArea = null;
-    riskScore = null;
-    avgSpeed = null;
-    weather = null;
-    aiResponse = null;
+    phase           = AppPhase.selection;
+    selectedArea    = null;
+    riskScore       = null;
+    avgSpeed        = null;
+    weather         = null;
+    aiResponse      = null;
+    chatHistory     = [];
+    _contextMsg     = null;
+    geminiTempC     = null;
+    geminiCondition = null;
     // heatmapPoints e trafficSegments mantidos — continuam visíveis no mapa
     notifyListeners();
   }
 
-  void setTimePeriod(TimePeriod p) {
-    if (timePeriod == p) return;
-    timePeriod = p;
+  void setDayType(DayType d) {
+    if (dayType == d) return;
+    dayType = d;
+    riskBadges.clear();
+    _loadRiskBadgesAsync();
+    loadMapLayers(currentHour);
+    notifyListeners();
+  }
+
+  void setHour(int h) {
+    selectedHour = h;
+    isNowMode    = false;
+    riskBadges.clear();
+    _loadRiskBadgesAsync();
+    loadMapLayers(h);
+    notifyListeners();
+  }
+
+  void setNow() {
+    isNowMode = true;
     riskBadges.clear();
     _loadRiskBadgesAsync();
     loadMapLayers(currentHour);

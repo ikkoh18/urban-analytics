@@ -201,17 +201,23 @@ def _congestion_ratio(hour: int) -> float:
 
 
 def _speed_to_color(speed: float) -> str:
-    if speed < 40:
+    """
+    Classifica velocidade em cores.
+    Thresholds em km/h: azul > 65 km/h | laranja 40–65 km/h | vermelho < 40 km/h
+    (Dataset PeMS em mph → 65 km/h ≈ 40 mph | 40 km/h ≈ 25 mph)
+    """
+    if speed < 25:   # < 40 km/h
         return "red"
-    if speed < 55:
+    if speed < 40:   # 40–65 km/h
         return "orange"
-    return "blue"
+    return "blue"    # > 65 km/h
 
 
 def get_segments_by_hour(hour: int) -> list[dict]:
     """Retorna segmentos com geometria real (OSRM) e velocidade real (PeMS)."""
     ratio = _congestion_ratio(hour)
     result = []
+    speeds_log = []
     for seg in _SEGMENTS:
         route = seg["route"]
         if (
@@ -223,12 +229,14 @@ def get_segments_by_hour(hour: int) -> list[dict]:
         else:
             avg_speed = seg["base_speed"] * ratio
         avg_speed = round(avg_speed, 1)
+        speeds_log.append(f"{seg['name']}: {avg_speed} mph")
         result.append({
             "name":      seg["name"],
             "points":    seg["points"],
             "avg_speed": avg_speed,
             "color":     _speed_to_color(avg_speed),
         })
+    print(f"[traffic] hour={hour} speeds → {' | '.join(speeds_log)}")
     return result
 
 
