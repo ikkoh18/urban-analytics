@@ -22,13 +22,33 @@ _global_counts = _df.groupby(["date", "hour"]).size()
 _P33 = float(_global_counts.quantile(0.33))
 _P66 = float(_global_counts.quantile(0.66))
 
-# Máximo de crimes diários por hora de qualquer área — usado na normalização
-_area_daily = (
+# Normalização relativa por hora: min-max entre os bairros para cada hora
+# Garante que o bairro mais perigoso numa hora = 1.0 e o mais seguro = 0.0
+_area_hour_avg = (
     _df.groupby(["area_name", "date", "hour"])
     .size()
     .reset_index(name="cnt")
+    .groupby(["area_name", "hour"])["cnt"]
+    .mean()
 )
-_CRIME_MAX = float(_area_daily["cnt"].max()) if not _area_daily.empty else 1.0
+
+_crime_norm_cache: dict[tuple, float] = {}
+for _hour in range(24):
+    try:
+        _hour_vals = _area_hour_avg.xs(_hour, level="hour")
+        _vmin, _vmax = _hour_vals.min(), _hour_vals.max()
+        _rng = (_vmax - _vmin) if _vmax != _vmin else 1.0
+        for _area, _val in _hour_vals.items():
+            _crime_norm_cache[(_area, _hour)] = float((_val - _vmin) / _rng)
+    except KeyError:
+        pass
+
+# Log de diagnóstico — mostra a distribuição real dos scores por área
+_area_totals = _df.groupby("area_name").size().sort_values(ascending=False)
+print("=== crime_norm diagnóstico (média diária, hora 20) ===")
+for _a in _area_totals.index[:10]:
+    _n = _crime_norm_cache.get((_a, 20), 0.0)
+    print(f"  {_a:25s} norm={_n:.3f}  total={int(_area_totals[_a])}")
 
 # ── Cache de heatmap pré-computado para as 24 horas ─────────────────────────
 # Computed once at startup so /crime/heatmap responds in <50ms instead of timing out.
@@ -143,9 +163,5 @@ def get_areas() -> list[str]:
 
 
 def get_crime_norm_for_area_hour(area_name: str, hour: int) -> float:
-    """Crime normalizado 0-1 para uso no risk_service."""
-    sub = _df[(_df["area_name"] == area_name) & (_df["hour"] == hour)]
-    if sub.empty:
-        return 0.0
-    avg = float(sub.groupby("date").size().mean())
-    return min(avg / _CRIME_MAX, 1.0)
+    """Crime normalizado 0-1 relativo aos outros bairros no mesmo horário."""
+    return _crime_norm_cache.get((area_name, hour), 0.0)

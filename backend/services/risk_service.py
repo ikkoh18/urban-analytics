@@ -20,7 +20,7 @@ def _compute_score(area_name: str, hour: int,
 
     raw = crime_norm * 0.5 + speed_norm * 0.3 + weather_norm * 0.2
     score = round(raw * 10, 2)
-    level = "high" if score >= 7 else ("medium" if score >= 4 else "low")
+    level = "high" if score >= 6.0 else ("medium" if score >= 3.5 else "low")
 
     return {
         "area_name": area_name,
@@ -68,7 +68,7 @@ def get_risk_ranking() -> list[dict]:
             for h in range(24)
         ]
         avg = round(sum(scores) / len(scores), 2)
-        level = "high" if avg >= 7 else ("medium" if avg >= 4 else "low")
+        level = "high" if avg >= 6.0 else ("medium" if avg >= 3.5 else "low")
         ranking.append({"name": area, "avg_score": avg, "risk_level": level})
 
     ranking.sort(key=lambda x: -x["avg_score"])

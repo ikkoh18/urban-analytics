@@ -11,6 +11,7 @@ import 'home_controller.dart';
 
 const _kLACenter = LatLng(34.0522, -118.2437);
 
+
 // ══════════════════════════════════════════════════════════════════════════════
 // HOME PAGE
 // ══════════════════════════════════════════════════════════════════════════════
@@ -248,15 +249,19 @@ class _MapSection extends StatelessWidget {
                 userAgentPackageName: 'com.urban.analytics',
               ),
               if (ctrl.heatmapPoints.isNotEmpty)
-                HeatMapLayer(
-                  heatMapDataSource:
-                      InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
-                  heatMapOptions: HeatMapOptions(
-                    gradient: HeatMapOptions.defaultGradient,
-                    minOpacity: 0.35,
-                    radius: 28,
-                  ),
-                ),
+                Builder(builder: (ctx) {
+                  final zoom = MapCamera.of(ctx).zoom;
+                  final radius = (zoom * 2.8).clamp(10.0, 120.0);
+                  return HeatMapLayer(
+                    heatMapDataSource:
+                        InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
+                    heatMapOptions: HeatMapOptions(
+                      gradient: HeatMapOptions.defaultGradient,
+                      minOpacity: 0.3,
+                      radius: radius,
+                    ),
+                  );
+                }),
               if (ctrl.trafficSegments.isNotEmpty)
                 PolylineLayer(
                   polylines: ctrl.trafficSegments
@@ -409,15 +414,19 @@ class _FullscreenMap extends StatelessWidget {
               userAgentPackageName: 'com.urban.analytics',
             ),
             if (ctrl.heatmapPoints.isNotEmpty)
-              HeatMapLayer(
-                heatMapDataSource:
-                    InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
-                heatMapOptions: HeatMapOptions(
-                  gradient: HeatMapOptions.defaultGradient,
-                  minOpacity: 0.4,
-                  radius: 30,
-                ),
-              ),
+              Builder(builder: (ctx) {
+                final zoom = MapCamera.of(ctx).zoom;
+                final radius = (zoom * 2.8).clamp(10.0, 120.0);
+                return HeatMapLayer(
+                  heatMapDataSource:
+                      InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
+                  heatMapOptions: HeatMapOptions(
+                    gradient: HeatMapOptions.defaultGradient,
+                    minOpacity: 0.3,
+                    radius: radius,
+                  ),
+                );
+              }),
             if (ctrl.trafficSegments.isNotEmpty)
               PolylineLayer(
                 polylines: ctrl.trafficSegments
