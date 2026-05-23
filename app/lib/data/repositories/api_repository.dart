@@ -16,6 +16,24 @@ const _kBase = String.fromEnvironment(
 class ApiRepository {
   final _client = http.Client();
 
+  Future<Map<String, dynamic>?> _post(
+      String path, Map<String, dynamic> body) async {
+    try {
+      final uri = Uri.parse('$_kBase$path');
+      final res = await _client
+          .post(
+            uri,
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 25));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Map<String, dynamic>?> _get(String path) async {
     try {
       final uri = Uri.parse('$_kBase$path');
@@ -137,6 +155,31 @@ class ApiRepository {
     final data = await _getList('/risk/ranking');
     if (data == null) return [];
     return data.cast<Map<String, dynamic>>();
+  }
+
+  // ── AI ───────────────────────────────────────────────────────────────────
+
+  /// Chamada ao endpoint de chat da IA no backend.
+  /// [isInitial] = true → resposta inicial ao selecionar bairro (cacheada).
+  /// [isInitial] = false → resposta de chat livre (usa [history]).
+  Future<String?> fetchAIChat({
+    required String context,
+    required String system,
+    List<Map<String, String>> history = const [],
+    bool isInitial = false,
+  }) async {
+    final data = await _post('/ai/chat', {
+      'context': context,
+      'system': system,
+      'history': history,
+      'is_initial': isInitial,
+    });
+    return data?['reply'] as String?;
+  }
+
+  /// Clima em tempo real via Gemini (backend). Retorna {temp_c, condition, humidity}.
+  Future<Map<String, dynamic>?> fetchAIWeather(String area) async {
+    return _post('/ai/weather', {'area': area});
   }
 
   void dispose() => _client.close();

@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,11 +7,6 @@ import '../../data/models/risk_score_model.dart';
 import '../../data/models/traffic_segment_model.dart';
 import '../../data/models/weather_current_model.dart';
 
-const _kGeminiKey =
-    String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
-
-const _kGeminiBase =
-    'https://generativelanguage.googleapis.com/v1beta/models';
 
 enum AppPhase { selection, result }
 
@@ -66,7 +59,6 @@ String formatAreaName(String raw) => raw
 
 class HomeController extends ChangeNotifier {
   final _api = ApiRepository();
-  final _client = http.Client();
 
   AppPhase phase    = AppPhase.selection;
   DayType  dayType  = DayType.weekday;
@@ -294,36 +286,7 @@ class HomeController extends ChangeNotifier {
         'score numbers, or terms like "high risk". Be direct and helpful. '
         'Max 3 sentences + 1 practical tip highlighted.';
 
-  // ── Gemini — helpers ─────────────────────────────────────────────────────────
-
-  /// Converte lista de mensagens no formato interno para o formato Gemini.
-  /// Roles: 'user' → 'user', 'assistant' → 'model'
-  List<Map<String, dynamic>> _toGeminiContents(
-      List<Map<String, String>> msgs) {
-    return msgs
-        .map((m) => {
-              'role': m['role'] == 'assistant' ? 'model' : 'user',
-              'parts': [
-                {'text': m['content'] ?? ''}
-              ],
-            })
-        .toList();
-  }
-
-  /// Extrai o texto da resposta do Gemini.
-  String _parseGeminiResponse(http.Response res) {
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final candidates = data['candidates'] as List<dynamic>;
-      final parts =
-          (candidates[0]['content']['parts'] as List<dynamic>);
-      return (parts[0] as Map<String, dynamic>)['text'] as String;
-    }
-    debugPrint('[gemini] error ${res.statusCode}: ${res.body}');
-    throw Exception('Gemini API error: ${res.statusCode}');
-  }
-
-  // ── Chamada à API Gemini ──────────────────────────────────────────────────────
+  // ── Chamada à IA via backend ──────────────────────────────────────────────────
   Future<void> _loadAI() async {
     isLoadingAI = true;
     chatHistory = [];
@@ -332,7 +295,12 @@ class HomeController extends ChangeNotifier {
 
     String response;
     try {
-      response = _kGeminiKey.isEmpty ? _fallback() : await _callGemini();
+      final reply = await _api.fetchAIChat(
+        context: _contextMsg!,
+        system: _sysPrompt(),
+        isInitial: true,
+      );
+      response = reply ?? _fallback();
     } catch (_) {
       response = _fallback();
     }
@@ -343,74 +311,20 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String> _callGemini() async {
-    final url =
-        '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
-    final res = await _client
-        .post(
-          Uri.parse(url),
-          headers: {'content-type': 'application/json'},
-          body: jsonEncode({
-            'system_instruction': {
-              'parts': [{'text': _sysPrompt()}]
-            },
-            'contents': [
-              {
-                'role': 'user',
-                'parts': [{'text': _contextMsg ?? _buildContextMsg()}]
-              }
-            ],
-            'generationConfig': {'maxOutputTokens': 400},
-          }),
-        )
-        .timeout(const Duration(seconds: 20));
-
-    return _parseGeminiResponse(res);
-  }
-
-  // ── Clima em tempo real via Gemini ────────────────────────────────────────────
+  // ── Clima em tempo real via backend ──────────────────────────────────────────
   Future<void> _fetchGeminiWeather(String area) async {
-    if (_kGeminiKey.isEmpty) return;
     isLoadingGeminiWeather = true;
     notifyListeners();
 
     try {
-      final areaName = formatAreaName(area);
-      final prompt =
-          'What is the current weather in $areaName, Los Angeles right now? '
-          'Reply in JSON only, no markdown:\n'
-          '{"temp_c": 22, "condition": "Sunny", "humidity": 65}';
-
-      final url =
-          '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
-      final res = await _client
-          .post(
-            Uri.parse(url),
-            headers: {'content-type': 'application/json'},
-            body: jsonEncode({
-              'contents': [
-                {
-                  'role': 'user',
-                  'parts': [{'text': prompt}]
-                }
-              ],
-              'generationConfig': {'maxOutputTokens': 100},
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      final raw = _parseGeminiResponse(res);
-      // Remove possível markdown code block (```json ... ```)
-      final cleaned = raw
-          .replaceAll(RegExp(r'```[a-z]*\n?'), '')
-          .replaceAll('```', '')
-          .trim();
-      final json = jsonDecode(cleaned) as Map<String, dynamic>;
-      geminiTempC     = (json['temp_c'] as num?)?.toDouble();
-      geminiCondition = json['condition'] as String?;
-      debugPrint('[gemini weather] ${geminiTempC}°C · $geminiCondition');
+      final data = await _api.fetchAIWeather(formatAreaName(area));
+      if (data != null) {
+        geminiTempC     = (data['temp_c'] as num?)?.toDouble();
+        geminiCondition = data['condition'] as String?;
+        debugPrint('[ai weather] ${geminiTempC}°C · $geminiCondition');
+      }
     } catch (e) {
-      debugPrint('[gemini weather] ERROR: $e');
+      debugPrint('[ai weather] ERROR: $e');
     }
 
     isLoadingGeminiWeather = false;
@@ -428,11 +342,15 @@ class HomeController extends ChangeNotifier {
 
     String reply;
     try {
-      reply = _kGeminiKey.isEmpty
-          ? (isPt
-              ? 'Configure a chave GEMINI_API_KEY para respostas ao vivo.'
-              : 'Set up your GEMINI_API_KEY for live responses.')
-          : await _callGeminiChat();
+      final result = await _api.fetchAIChat(
+        context: _contextMsg ?? _buildContextMsg(),
+        system: _sysPrompt(),
+        history: chatHistory,
+      );
+      reply = result ??
+          (isPt
+              ? 'Não consegui responder agora. Tente novamente.'
+              : "Couldn't respond right now. Please try again.");
     } catch (_) {
       reply = isPt
           ? 'Não consegui responder agora. Tente novamente.'
@@ -443,32 +361,6 @@ class HomeController extends ChangeNotifier {
       ..add({'role': 'assistant', 'content': reply});
     isChatLoading = false;
     notifyListeners();
-  }
-
-  Future<String> _callGeminiChat() async {
-    // Histórico completo: contexto inicial + conversa exibida
-    final contents = _toGeminiContents([
-      {'role': 'user', 'content': _contextMsg ?? _buildContextMsg()},
-      ...chatHistory,
-    ]);
-
-    final url =
-        '$_kGeminiBase/gemini-1.5-flash:generateContent?key=$_kGeminiKey';
-    final res = await _client
-        .post(
-          Uri.parse(url),
-          headers: {'content-type': 'application/json'},
-          body: jsonEncode({
-            'system_instruction': {
-              'parts': [{'text': _sysPrompt()}]
-            },
-            'contents': contents,
-            'generationConfig': {'maxOutputTokens': 400},
-          }),
-        )
-        .timeout(const Duration(seconds: 20));
-
-    return _parseGeminiResponse(res);
   }
 
   String _fallback() {
@@ -572,7 +464,6 @@ class HomeController extends ChangeNotifier {
   @override
   void dispose() {
     _api.dispose();
-    _client.close();
     super.dispose();
   }
 }

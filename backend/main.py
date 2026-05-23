@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import CRIME_CLEAN_CSV, URBAN_DATASET_CSV, TRAFFIC_CORE_CSV, WEATHER_CSV
-from routers import crime, traffic, weather, risk
+from routers import crime, traffic, weather, risk, ai
 
 app = FastAPI(title="Urban Analytics API")
 
@@ -18,6 +18,7 @@ app.include_router(crime.router)
 app.include_router(traffic.router)
 app.include_router(weather.router)
 app.include_router(risk.router)
+app.include_router(ai.router)
 
 
 @app.get("/")
