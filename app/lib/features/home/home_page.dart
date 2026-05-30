@@ -11,6 +11,13 @@ import 'home_controller.dart';
 
 const _kLACenter = LatLng(34.0522, -118.2437);
 
+Color _heatColor(double w) {
+  if (w > 0.75) return const Color(0xFFFF2222);
+  if (w > 0.50) return const Color(0xFFFF8800);
+  if (w > 0.25) return const Color(0xFFFFDD00);
+  return const Color(0xFF44BB44);
+}
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HOME PAGE
@@ -158,20 +165,20 @@ class _AppHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               RichText(
-                text: const TextSpan(
+                text: TextSpan(
                   children: [
                     TextSpan(
                       text: 'Urban ',
-                      style: TextStyle(
-                        fontFamily: 'Syne', fontSize: 15,
-                        fontWeight: FontWeight.w700, color: Colors.white,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 15, fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
                     TextSpan(
                       text: 'Analytics',
-                      style: TextStyle(
-                        fontFamily: 'Syne', fontSize: 15,
-                        fontWeight: FontWeight.w700, color: AppTheme.teal,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 15, fontWeight: FontWeight.w700,
+                        color: AppTheme.teal,
                       ),
                     ),
                   ],
@@ -249,19 +256,15 @@ class _MapSection extends StatelessWidget {
                 userAgentPackageName: 'com.urban.analytics',
               ),
               if (ctrl.heatmapPoints.isNotEmpty)
-                Builder(builder: (ctx) {
-                  final zoom = MapCamera.of(ctx).zoom;
-                  final radius = (zoom * 2.8).clamp(10.0, 120.0);
-                  return HeatMapLayer(
-                    heatMapDataSource:
-                        InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
-                    heatMapOptions: HeatMapOptions(
-                      gradient: HeatMapOptions.defaultGradient,
-                      minOpacity: 0.3,
-                      radius: radius,
-                    ),
-                  );
-                }),
+                CircleLayer(
+                  circles: ctrl.heatmapPoints.map((p) => CircleMarker(
+                    point: p.latLng,
+                    radius: 400 + (p.intensity * 600),
+                    useRadiusInMeter: true,
+                    color: _heatColor(p.intensity).withValues(alpha: 0.35),
+                    borderStrokeWidth: 0,
+                  )).toList(),
+                ),
               if (ctrl.trafficSegments.isNotEmpty)
                 PolylineLayer(
                   polylines: ctrl.trafficSegments
@@ -414,19 +417,15 @@ class _FullscreenMap extends StatelessWidget {
               userAgentPackageName: 'com.urban.analytics',
             ),
             if (ctrl.heatmapPoints.isNotEmpty)
-              Builder(builder: (ctx) {
-                final zoom = MapCamera.of(ctx).zoom;
-                final radius = (zoom * 2.8).clamp(10.0, 120.0);
-                return HeatMapLayer(
-                  heatMapDataSource:
-                      InMemoryHeatMapDataSource(data: ctrl.heatmapPoints),
-                  heatMapOptions: HeatMapOptions(
-                    gradient: HeatMapOptions.defaultGradient,
-                    minOpacity: 0.3,
-                    radius: radius,
-                  ),
-                );
-              }),
+              CircleLayer(
+                circles: ctrl.heatmapPoints.map((p) => CircleMarker(
+                  point: p.latLng,
+                  radius: 400 + (p.intensity * 600),
+                  useRadiusInMeter: true,
+                  color: _heatColor(p.intensity).withValues(alpha: 0.35),
+                  borderStrokeWidth: 0,
+                )).toList(),
+              ),
             if (ctrl.trafficSegments.isNotEmpty)
               PolylineLayer(
                 polylines: ctrl.trafficSegments
@@ -628,11 +627,8 @@ class _SubHeader extends StatelessWidget {
           Expanded(
             child: Text(
               formatAreaName(ctrl.selectedArea ?? ''),
-              style: const TextStyle(
-                fontFamily: 'Syne',
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -804,19 +800,15 @@ class _HeroText extends StatelessWidget {
               children: [
                 TextSpan(
                   text: isPt ? 'Aonde vamos ' : 'Where are we ',
-                  style: const TextStyle(
-                    fontFamily: 'Syne',
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 22, fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
                 TextSpan(
                   text: isPt ? 'hoje?' : 'going?',
-                  style: const TextStyle(
-                    fontFamily: 'Syne',
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 22, fontWeight: FontWeight.w800,
                     color: AppTheme.teal,
                   ),
                 ),
@@ -1023,21 +1015,15 @@ class _HourPickerDialogState extends State<_HourPickerDialog> {
           children: [
             Text(
               s ? 'Escolher horário' : 'Choose time',
-              style: const TextStyle(
-                fontFamily: 'Syne',
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               '${_hour.toString().padLeft(2, '0')}h',
-              style: const TextStyle(
-                fontFamily: 'Syne',
-                fontSize: 52,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.teal,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 52, fontWeight: FontWeight.w800, color: AppTheme.teal,
               ),
             ),
             const SizedBox(height: 12),
@@ -1625,8 +1611,8 @@ class _ChatBlockState extends State<_ChatBlock> {
     });
   }
 
-  void _send() {
-    final t = _inputCtrl.text.trim();
+  void _send([String? override]) {
+    final t = override ?? _inputCtrl.text.trim();
     if (t.isEmpty || widget.ctrl.isChatLoading) return;
     _inputCtrl.clear();
     widget.ctrl.sendChatMessage(t);
@@ -1664,11 +1650,8 @@ class _ChatBlockState extends State<_ChatBlock> {
             const SizedBox(width: 8),
             Text(
               s ? 'Guia local' : 'Local guide',
-              style: const TextStyle(
-                fontFamily: 'Syne',
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white,
               ),
             ),
           ],
@@ -1745,6 +1728,47 @@ class _ChatBlockState extends State<_ChatBlock> {
                 ],
               ),
             ),
+
+          // Chips de perguntas rápidas — só quando não há msgs do usuário
+          if (!c.isLoadingAI &&
+              c.chatHistory.isNotEmpty &&
+              !c.chatHistory.any((m) => m['role'] == 'user')) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: (s
+                  ? [
+                      'É seguro andar por aqui agora?',
+                      'Como está o trânsito nessa região?',
+                      'Como está o clima agora?',
+                    ]
+                  : [
+                      'Is it safe to walk around here now?',
+                      'How is the traffic in this area?',
+                      "What's the weather like right now?",
+                    ])
+                  .map((q) => GestureDetector(
+                        onTap: () => _send(q),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                                color: AppTheme.teal, width: 1),
+                            borderRadius: BorderRadius.circular(20),
+                            color: AppTheme.teal.withValues(alpha: 0.08),
+                          ),
+                          child: Text(
+                            q,
+                            style: GoogleFonts.dmSans(
+                                color: AppTheme.teal, fontSize: 12),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
 
           // Campo de input
           const SizedBox(height: 12),

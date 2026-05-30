@@ -53,6 +53,26 @@ for _a in _area_totals.index[:10]:
 # ── Cache de heatmap pré-computado para as 24 horas ─────────────────────────
 # Computed once at startup so /crime/heatmap responds in <50ms instead of timing out.
 
+def _cluster_points(points: list[dict], cell_size: float = 0.01) -> list[dict]:
+    """Agrupa pontos em células de ~1km. Evita excesso de pontos no mapa."""
+    clusters: dict[tuple, dict] = {}
+    for p in points:
+        lat_key = round(round(p["lat"] / cell_size) * cell_size, 4)
+        lon_key = round(round(p["lon"] / cell_size) * cell_size, 4)
+        key = (lat_key, lon_key)
+        if key not in clusters:
+            clusters[key] = {"lat": lat_key, "lon": lon_key, "weight": 0.0, "count": 0}
+        clusters[key]["weight"] += p["weight"]
+        clusters[key]["count"] += 1
+    result = list(clusters.values())
+    if not result:
+        return []
+    max_w = max(r["weight"] for r in result) or 1.0
+    for r in result:
+        r["weight"] = round(r["weight"] / max_w, 3)
+    return result
+
+
 def _compute_heatmap_for_hour(hour: int) -> list[dict]:
     sub = _df[_df["hour"] == hour]
     if sub.empty:
@@ -70,10 +90,11 @@ def _compute_heatmap_for_hour(hour: int) -> list[dict]:
     grouped["weight"] = grouped["count"].rank(pct=True)
     grouped = grouped[grouped["weight"] >= 0.30]
     grouped = grouped.nlargest(1000, "weight")
-    return [
+    raw = [
         {"lat": float(row.lat_r), "lon": float(row.lon_r), "weight": round(float(row.weight), 4)}
         for row in grouped.itertuples()
     ]
+    return _cluster_points(raw)
 
 
 print("Pré-computando heatmap para 24 horas...", flush=True)
