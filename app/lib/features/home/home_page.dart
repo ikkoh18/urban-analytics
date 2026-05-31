@@ -12,11 +12,11 @@ import 'home_controller.dart';
 const _kLACenter = LatLng(34.0522, -118.2437);
 
 Color _heatmapColor(double w) {
-  if (w > 0.85) return const Color(0xFFE53935); // vermelho  — Central
-  if (w > 0.65) return const Color(0xFFFF7043); // laranja   — 77th, Pacific, SW
-  if (w > 0.44) return const Color(0xFFFFB300); // âmbar     — médio-alto
-  if (w > 0.27) return const Color(0xFFFFEE58); // amarelo   — médio
-  return const Color(0xFF81C784);               // verde     — baixo
+  if (w > 0.85) return const Color(0xFFE53935);
+  if (w > 0.65) return const Color(0xFFFF7043);
+  if (w > 0.44) return const Color(0xFFFFB300);
+  if (w > 0.27) return const Color(0xFFFFEE58);
+  return const Color(0xFF81C784);
 }
 
 
@@ -282,18 +282,18 @@ class _MapSection extends StatelessWidget {
                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.urban.analytics',
               ),
-              if (ctrl.visibleHeatmapPoints.isNotEmpty)
+              if (ctrl.showHeatmap && ctrl.visibleHeatmapPoints.isNotEmpty)
                 CircleLayer(
                   circles: ctrl.visibleHeatmapPoints.map((p) => CircleMarker(
                     point: p.latLng,
                     radius: 150 + (p.intensity * 250),
                     useRadiusInMeter: true,
-                    color: _heatmapColor(p.intensity).withValues(
-                      alpha: 0.15 + (p.intensity * 0.25)),
+                    color: _heatmapColor(p.intensity)
+                        .withValues(alpha: 0.15 + p.intensity * 0.25),
                     borderStrokeWidth: 0,
                   )).toList(),
                 ),
-              if (ctrl.trafficSegments.isNotEmpty)
+              if (ctrl.showTraffic && ctrl.trafficSegments.isNotEmpty)
                 PolylineLayer(
                   polylines: ctrl.trafficSegments
                       .map((seg) => Polyline(
@@ -372,6 +372,11 @@ class _MapSection extends StatelessWidget {
             top: 10, right: 10,
             child: _FullscreenButton(onTap: onFullscreen),
           ),
+          // Toggles de camadas
+          Positioned(
+            top: 10, left: 10,
+            child: _LayerToggles(ctrl: ctrl),
+          ),
           // Item 4 — Legendas criminalidade + tráfego
           Positioned(
             bottom: 12, right: 10,
@@ -445,18 +450,18 @@ class _FullscreenMap extends StatelessWidget {
                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.urban.analytics',
             ),
-            if (ctrl.visibleHeatmapPoints.isNotEmpty)
+            if (ctrl.showHeatmap && ctrl.visibleHeatmapPoints.isNotEmpty)
               CircleLayer(
                 circles: ctrl.visibleHeatmapPoints.map((p) => CircleMarker(
                   point: p.latLng,
                   radius: 150 + (p.intensity * 250),
                   useRadiusInMeter: true,
-                  color: _heatmapColor(p.intensity).withValues(
-                      alpha: 0.15 + (p.intensity * 0.25)),
+                  color: _heatmapColor(p.intensity)
+                      .withValues(alpha: 0.15 + p.intensity * 0.25),
                   borderStrokeWidth: 0,
                 )).toList(),
               ),
-            if (ctrl.trafficSegments.isNotEmpty)
+            if (ctrl.showTraffic && ctrl.trafficSegments.isNotEmpty)
               PolylineLayer(
                 polylines: ctrl.trafficSegments
                     .map((seg) => Polyline(
@@ -484,6 +489,11 @@ class _FullscreenMap extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        // Toggles de camadas (fullscreen)
+        Positioned(
+          top: 12, left: 12,
+          child: _LayerToggles(ctrl: ctrl),
         ),
         // Botão sair fullscreen
         Positioned(
@@ -1848,6 +1858,88 @@ class _ChatBlockState extends State<_ChatBlock> {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ── Toggles de camadas do mapa ────────────────────────────────────────────────
+class _LayerToggles extends StatelessWidget {
+  const _LayerToggles({required this.ctrl});
+  final HomeController ctrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ToggleChip(
+          label: ctrl.isPt ? 'Crime' : 'Crime',
+          icon: Icons.local_fire_department,
+          active: ctrl.showHeatmap,
+          onTap: ctrl.toggleHeatmap,
+        ),
+        const SizedBox(height: 6),
+        _ToggleChip(
+          label: ctrl.isPt ? 'Trânsito' : 'Traffic',
+          icon: Icons.directions_car,
+          active: ctrl.showTraffic,
+          onTap: ctrl.toggleTraffic,
+        ),
+      ],
+    );
+  }
+}
+
+class _ToggleChip extends StatelessWidget {
+  const _ToggleChip({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+  final String   label;
+  final IconData icon;
+  final bool     active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? AppTheme.teal.withValues(alpha: 0.18)
+              : AppTheme.navy.withValues(alpha: 0.80),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active
+                ? AppTheme.teal
+                : Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 12,
+                color: active ? AppTheme.teal : Colors.white38),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: active ? AppTheme.teal : Colors.white38,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

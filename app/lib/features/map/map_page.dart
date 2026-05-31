@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' hide MapController;
+import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/layout/app_scaffold.dart';
 import '../../core/theme/app_theme.dart';
@@ -7,13 +11,6 @@ import '../../data/models/urban_zone_model.dart';
 import '../../shared/widgets/app_drawer.dart';
 import 'map_controller.dart';
 
-Color _heatmapColor(double w) {
-  if (w > 0.85) return const Color(0xFFE53935);
-  if (w > 0.65) return const Color(0xFFFF7043);
-  if (w > 0.44) return const Color(0xFFFFB300);
-  if (w > 0.27) return const Color(0xFFFFEE58);
-  return const Color(0xFF81C784);
-}
 
 const _kHighColor = Color(0xFFF4821E);
 const _kMedColor  = Color(0xFF1E88A8);
@@ -29,6 +26,9 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   late final MapController _controller;
+  double _currentZoom = 11.0;
+  final StreamController<void> _heatmapReset =
+      StreamController<void>.broadcast();
 
   @override
   void initState() {
@@ -51,22 +51,22 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _onUpdate() => setState(() {});
+  void _onUpdate() {
+    _heatmapReset.add(null); // invalida cache de tiles do heatmap
+    setState(() {});
+  }
 
   @override
   void dispose() {
     _controller.removeListener(_onUpdate);
     _controller.dispose();
+    _heatmapReset.close();
     super.dispose();
   }
 
-  // ── Feedback visual de horário: opacidade das camadas de risco ─────────
-  double get _circleOpacity {
-    final h = _controller.selectedHour;
-    if (h >= 18) return 0.50;
-    if (h <= 5)  return 0.20;
-    return 0.35;
-  }
+  // ── Raio do heatmap cresce com o zoom ─────────────────────────────────
+  double _heatmapRadius(double zoom) =>
+      (20.0 * pow(2.0, zoom - 10)).clamp(15.0, 200.0);
 
   String _diaSemana() {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -168,9 +168,19 @@ class _MapPageState extends State<MapPage> {
   // ── FlutterMap: heatmap de crime + tráfego + marcadores tocáveis ───────
   Widget _buildMap() {
     return FlutterMap(
-      options: const MapOptions(
-        initialCenter: LatLng(34.0522, -118.2437),
+      options: MapOptions(
+        initialCenter: const LatLng(34.0522, -118.2437),
         initialZoom: 11,
+        onMapEvent: (event) {
+          if (event is MapEventMove ||
+              event is MapEventScrollWheelZoom ||
+              event is MapEventMoveEnd) {
+            final newZoom = event.camera.zoom;
+            if ((newZoom - _currentZoom).abs() > 0.1) {
+              setState(() => _currentZoom = newZoom);
+            }
+          }
+        },
       ),
       children: [
         TileLayer(
@@ -178,17 +188,27 @@ class _MapPageState extends State<MapPage> {
           userAgentPackageName: 'com.urbananalytics',
         ),
 
-        // ── Heatmap de crime com CircleMarkers em metros (escala com zoom) ──
+        // ── Heatmap de crime com gradiente contínuo (escala com zoom) ───────
         if (_controller.showCrimeLayer && _controller.heatmapPoints.isNotEmpty)
-          CircleLayer(
-            circles: _controller.heatmapPoints.map((p) => CircleMarker(
-              point: p.latLng,
-              radius: 150 + (p.intensity * 250),
-              useRadiusInMeter: true,
-              color: _heatmapColor(p.intensity).withValues(
-                  alpha: 0.15 + (p.intensity * 0.25)),
-              borderStrokeWidth: 0,
-            )).toList(),
+          HeatMapLayer(
+            heatMapDataSource: InMemoryHeatMapDataSource(
+              data: _controller.heatmapPoints
+                  .map((p) => WeightedLatLng(p.latLng, p.intensity))
+                  .toList(),
+            ),
+            reset: _heatmapReset.stream,
+            heatMapOptions: HeatMapOptions(
+              radius: _heatmapRadius(_currentZoom),
+              blurFactor: 0.85,
+              minOpacity: 0.03,
+              layerOpacity: 0.80,
+              gradient: {
+                0.25: Colors.green,      // baixo
+                0.50: Colors.yellow,     // médio
+                0.75: Colors.deepOrange, // alto
+                1.0:  Colors.red,        // crítico — só Central
+              },
+            ),
           ),
 
         // ── Linhas de tráfego estilo Google Maps ──────────────────────────

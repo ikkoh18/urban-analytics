@@ -74,9 +74,14 @@ class HomeController extends ChangeNotifier {
   String searchQuery = '';
 
   // ── Mapa (ambos os estados) ───────────────────────────────────────────────────
-  List<HeatmapPoint> heatmapPoints        = [];
-  List<HeatmapPoint> visibleHeatmapPoints = []; // subset do tile visível
+  List<HeatmapPoint>   heatmapPoints        = [];
+  List<HeatmapPoint>   visibleHeatmapPoints = [];
   List<TrafficSegment> trafficSegments      = [];
+  bool showHeatmap = true;
+  bool showTraffic = true;
+
+  void toggleHeatmap() { showHeatmap = !showHeatmap; notifyListeners(); }
+  void toggleTraffic()  { showTraffic  = !showTraffic;  notifyListeners(); }
 
   // ── Estado 2 ─────────────────────────────────────────────────────────────────
   String?        selectedArea;
