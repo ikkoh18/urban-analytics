@@ -105,6 +105,19 @@ for _h in range(24):
 print(f"Heatmap cache pronto — ex. hora 14: {len(_heatmap_cache[14])} pontos", flush=True)
 
 
+def get_heatmap_tile(
+    hour: int,
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+) -> list[dict]:
+    """Retorna apenas os pontos do cache dentro do bounding box informado."""
+    all_points = _heatmap_cache.get(hour, [])
+    return [
+        p for p in all_points
+        if lat_min <= p["lat"] <= lat_max and lon_min <= p["lon"] <= lon_max
+    ]
+
+
 def get_heatmap_points(hour: int, day_of_week: str | None = None) -> list[dict]:
     """Retorna até 1000 pontos normalizados por ranking percentual.
 

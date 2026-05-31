@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/models/heatmap_point_model.dart';
 import '../../data/repositories/api_repository.dart';
 import '../../data/models/risk_score_model.dart';
 import '../../data/models/traffic_segment_model.dart';
@@ -74,8 +74,9 @@ class HomeController extends ChangeNotifier {
   String searchQuery = '';
 
   // ── Mapa (ambos os estados) ───────────────────────────────────────────────────
-  List<WeightedLatLng> heatmapPoints   = [];
-  List<TrafficSegment> trafficSegments = [];
+  List<HeatmapPoint> heatmapPoints        = [];
+  List<HeatmapPoint> visibleHeatmapPoints = []; // subset do tile visível
+  List<TrafficSegment> trafficSegments      = [];
 
   // ── Estado 2 ─────────────────────────────────────────────────────────────────
   String?        selectedArea;
@@ -189,11 +190,43 @@ class HomeController extends ChangeNotifier {
         _api.fetchHeatmapPoints(hour),
         _api.fetchTrafficSegments(hour),
       ]);
-      heatmapPoints   = results[0] as List<WeightedLatLng>;
-      trafficSegments = results[1] as List<TrafficSegment>;
+      heatmapPoints        = results[0] as List<HeatmapPoint>;
+      visibleHeatmapPoints = heatmapPoints; // inicializa com dados completos
+      trafficSegments      = results[1] as List<TrafficSegment>;
       notifyListeners();
     } catch (e) {
       debugPrint('[loadMapLayers] ERROR: $e');
+    }
+  }
+
+  /// Recarrega o heatmap para o bounding box visível no mapa.
+  /// zoom < 11 → usa dados completos (visão geral de LA)
+  /// zoom >= 11 → busca apenas pontos da área visível + margem de 20%
+  Future<void> loadHeatmapTile({
+    required double latMin,
+    required double latMax,
+    required double lonMin,
+    required double lonMax,
+    required double zoom,
+  }) async {
+    if (zoom < 11.0) {
+      visibleHeatmapPoints = heatmapPoints;
+      notifyListeners();
+      return;
+    }
+    try {
+      final latPad = (latMax - latMin) * 0.2;
+      final lonPad = (lonMax - lonMin) * 0.2;
+      visibleHeatmapPoints = await _api.fetchHeatmapTile(
+        hour:   currentHour,
+        latMin: latMin - latPad,
+        latMax: latMax + latPad,
+        lonMin: lonMin - lonPad,
+        lonMax: lonMax + lonPad,
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[loadHeatmapTile] ERROR: $e');
     }
   }
 
@@ -351,7 +384,8 @@ class HomeController extends ChangeNotifier {
           (isPt
               ? 'Não consegui responder agora. Tente novamente.'
               : "Couldn't respond right now. Please try again.");
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[chat] ERROR: $e');
       reply = isPt
           ? 'Não consegui responder agora. Tente novamente.'
           : "Couldn't respond right now. Please try again.";

@@ -13,6 +13,20 @@ def heatmap(hour: int = Query(..., ge=0, le=23),
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/heatmap/tile")
+def heatmap_tile(
+    hour:    int   = Query(..., ge=0, le=23),
+    lat_min: float = Query(...),
+    lat_max: float = Query(...),
+    lon_min: float = Query(...),
+    lon_max: float = Query(...),
+):
+    try:
+        return crime_service.get_heatmap_tile(hour, lat_min, lat_max, lon_min, lon_max)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/by-hour")
 def by_hour():
     try:

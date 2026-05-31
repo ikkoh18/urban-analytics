@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import '../models/heatmap_point_model.dart';
 import '../models/traffic_segment_model.dart';
 import '../models/risk_score_model.dart';
 import '../models/weather_current_model.dart';
@@ -18,20 +18,19 @@ class ApiRepository {
 
   Future<Map<String, dynamic>?> _post(
       String path, Map<String, dynamic> body) async {
-    try {
-      final uri = Uri.parse('$_kBase$path');
-      final res = await _client
-          .post(
-            uri,
-            headers: {'content-type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 25));
-      if (res.statusCode == 200) {
-        return jsonDecode(res.body) as Map<String, dynamic>?;
-      }
-    } catch (_) {}
-    return null;
+    final uri = Uri.parse('$_kBase$path');
+    final res = await _client
+        .post(
+          uri,
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 25));
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>?;
+    }
+    // Lança exceção com detalhes para o chamador tratar
+    throw Exception('POST $path → ${res.statusCode}: ${res.body}');
   }
 
   Future<Map<String, dynamic>?> _get(String path) async {
@@ -58,15 +57,32 @@ class ApiRepository {
 
   // ── Crime ────────────────────────────────────────────────────────────────
 
-  Future<List<WeightedLatLng>> fetchHeatmapPoints(int hour) async {
+  Future<List<HeatmapPoint>> fetchHeatmapPoints(int hour) async {
     final data = await _getList('/crime/heatmap?hour=$hour');
     if (data == null) return [];
-    return data.map((p) {
-      final lat = (p['lat'] as num).toDouble();
-      final lon = (p['lon'] as num).toDouble();
-      final w   = (p['weight'] as num).toDouble();
-      return WeightedLatLng(LatLng(lat, lon), w);
-    }).toList();
+    return data.map((p) => HeatmapPoint(
+      LatLng((p['lat'] as num).toDouble(), (p['lon'] as num).toDouble()),
+      (p['weight'] as num).toDouble(),
+    )).toList();
+  }
+
+  Future<List<HeatmapPoint>> fetchHeatmapTile({
+    required int    hour,
+    required double latMin,
+    required double latMax,
+    required double lonMin,
+    required double lonMax,
+  }) async {
+    final data = await _getList(
+      '/crime/heatmap/tile?hour=$hour'
+      '&lat_min=$latMin&lat_max=$latMax'
+      '&lon_min=$lonMin&lon_max=$lonMax',
+    );
+    if (data == null) return [];
+    return data.map((p) => HeatmapPoint(
+      LatLng((p['lat'] as num).toDouble(), (p['lon'] as num).toDouble()),
+      (p['weight'] as num).toDouble(),
+    )).toList();
   }
 
   Future<List<double>> fetchCrimeByHour() async {

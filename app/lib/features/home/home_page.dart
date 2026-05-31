@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
-import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/theme/app_theme.dart';
@@ -11,12 +11,15 @@ import 'home_controller.dart';
 
 const _kLACenter = LatLng(34.0522, -118.2437);
 
-Color _heatColor(double w) {
-  if (w > 0.75) return const Color(0xFFFF2222);
-  if (w > 0.50) return const Color(0xFFFF8800);
-  if (w > 0.25) return const Color(0xFFFFDD00);
-  return const Color(0xFF44BB44);
+Color _heatmapColor(double w) {
+  if (w > 0.85) return const Color(0xFFE53935); // vermelho  — Central
+  if (w > 0.65) return const Color(0xFFFF7043); // laranja   — 77th, Pacific, SW
+  if (w > 0.44) return const Color(0xFFFFB300); // âmbar     — médio-alto
+  if (w > 0.27) return const Color(0xFFFFEE58); // amarelo   — médio
+  return const Color(0xFF81C784);               // verde     — baixo
 }
+
+
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -34,6 +37,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late final AnimatedMapController _animatedMapCtrl;
   final _searchCtrl = TextEditingController();
   late final AnimationController _pulseCtrl;
+  StreamSubscription<MapEvent>? _mapEventSub;
   bool _isFullscreen = false;
 
   AppPhase? _prevPhase;
@@ -53,6 +57,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
     _ctrl.addListener(_onUpdate);
     _ctrl.init();
+    // Subscreve após o primeiro frame — map controller precisa estar attached
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapEventSub = _animatedMapCtrl.mapController.mapEventStream
+          .listen(_onMapEvent);
+    });
+  }
+
+  void _onMapEvent(MapEvent event) {
+    if (event is! MapEventMoveEnd &&
+        event is! MapEventScrollWheelZoom &&
+        event is! MapEventFlingAnimationEnd) return;
+    try {
+      final camera = _animatedMapCtrl.mapController.camera;
+      final b      = camera.visibleBounds;
+      _ctrl.loadHeatmapTile(
+        latMin: b.south,
+        latMax: b.north,
+        lonMin: b.west,
+        lonMax: b.east,
+        zoom:   camera.zoom,
+      );
+    } catch (_) {}
   }
 
   void _onUpdate() {
@@ -75,6 +101,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _mapEventSub?.cancel();
     _pulseCtrl.dispose();
     _animatedMapCtrl.dispose();
     _ctrl.removeListener(_onUpdate);
@@ -255,13 +282,14 @@ class _MapSection extends StatelessWidget {
                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.urban.analytics',
               ),
-              if (ctrl.heatmapPoints.isNotEmpty)
+              if (ctrl.visibleHeatmapPoints.isNotEmpty)
                 CircleLayer(
-                  circles: ctrl.heatmapPoints.map((p) => CircleMarker(
+                  circles: ctrl.visibleHeatmapPoints.map((p) => CircleMarker(
                     point: p.latLng,
-                    radius: 400 + (p.intensity * 600),
+                    radius: 150 + (p.intensity * 250),
                     useRadiusInMeter: true,
-                    color: _heatColor(p.intensity).withValues(alpha: 0.35),
+                    color: _heatmapColor(p.intensity).withValues(
+                      alpha: 0.15 + (p.intensity * 0.25)),
                     borderStrokeWidth: 0,
                   )).toList(),
                 ),
@@ -354,9 +382,10 @@ class _MapSection extends StatelessWidget {
                 _MapLegend(
                   title: ctrl.isPt ? 'CRIMINALIDADE' : 'CRIME',
                   items: const [
-                    _LegendItem(color: Color(0xFFFF5555), label: 'Alta'),
-                    _LegendItem(color: Color(0xFFFFAA00), label: 'Moderada'),
-                    _LegendItem(color: Color(0xFF4CAF50), label: 'Baixa'),
+                    _LegendItem(color: Color(0xFFE53935), label: 'Alto'),
+                    _LegendItem(color: Color(0xFFFF7043), label: 'Mod-Alto'),
+                    _LegendItem(color: Color(0xFFFFB300), label: 'Moderado'),
+                    _LegendItem(color: Color(0xFF81C784), label: 'Baixo'),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -416,13 +445,14 @@ class _FullscreenMap extends StatelessWidget {
                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.urban.analytics',
             ),
-            if (ctrl.heatmapPoints.isNotEmpty)
+            if (ctrl.visibleHeatmapPoints.isNotEmpty)
               CircleLayer(
-                circles: ctrl.heatmapPoints.map((p) => CircleMarker(
+                circles: ctrl.visibleHeatmapPoints.map((p) => CircleMarker(
                   point: p.latLng,
-                  radius: 400 + (p.intensity * 600),
+                  radius: 150 + (p.intensity * 250),
                   useRadiusInMeter: true,
-                  color: _heatColor(p.intensity).withValues(alpha: 0.35),
+                  color: _heatmapColor(p.intensity).withValues(
+                      alpha: 0.15 + (p.intensity * 0.25)),
                   borderStrokeWidth: 0,
                 )).toList(),
               ),

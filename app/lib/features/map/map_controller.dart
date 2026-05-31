@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:latlong2/latlong.dart';
+import '../../data/models/heatmap_point_model.dart';
 import '../../data/models/urban_zone_model.dart';
 import '../../data/models/traffic_segment_model.dart';
 import '../../data/repositories/api_repository.dart';
@@ -22,7 +22,7 @@ class MapController extends ChangeNotifier {
   bool hasRain   = false;
 
   // Dados carregados da API — fallback local se API indisponível
-  List<WeightedLatLng>  _apiHeatmapPoints   = [];
+  List<HeatmapPoint>    _apiHeatmapPoints   = [];
   List<TrafficSegment>  _apiTrafficSegments = [];
 
   // ── Zonas (mantidas localmente — são contexto, não dados brutos) ─────────
@@ -71,7 +71,7 @@ class MapController extends ChangeNotifier {
 
   // ── Heatmap — dados reais da API ─────────────────────────────────────────
 
-  List<WeightedLatLng> get heatmapPoints => _apiHeatmapPoints;
+  List<HeatmapPoint> get heatmapPoints => _apiHeatmapPoints;
 
   // ── Segmentos de tráfego ─────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ class MapController extends ChangeNotifier {
       _api.fetchWeatherForMap(hour),
     ]);
 
-    final points   = results[0] as List<WeightedLatLng>;
+    final points   = results[0] as List<HeatmapPoint>;
     final segments = results[1] as List<TrafficSegment>;
     final weather  = results[2] as Map<String, dynamic>?;
 

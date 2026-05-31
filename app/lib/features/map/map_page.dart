@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' hide MapController;
-import 'package:flutter_map_heatmap/flutter_map_heatmap.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/layout/app_scaffold.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/urban_zone_model.dart';
 import '../../shared/widgets/app_drawer.dart';
 import 'map_controller.dart';
+
+Color _heatmapColor(double w) {
+  if (w > 0.85) return const Color(0xFFE53935);
+  if (w > 0.65) return const Color(0xFFFF7043);
+  if (w > 0.44) return const Color(0xFFFFB300);
+  if (w > 0.27) return const Color(0xFFFFEE58);
+  return const Color(0xFF81C784);
+}
 
 const _kHighColor = Color(0xFFF4821E);
 const _kMedColor  = Color(0xFF1E88A8);
@@ -171,25 +178,17 @@ class _MapPageState extends State<MapPage> {
           userAgentPackageName: 'com.urbananalytics',
         ),
 
-        // ── Heatmap de crime com dados reais (gradiente azul → vermelho) ───
+        // ── Heatmap de crime com CircleMarkers em metros (escala com zoom) ──
         if (_controller.showCrimeLayer && _controller.heatmapPoints.isNotEmpty)
-          HeatMapLayer(
-            heatMapDataSource: InMemoryHeatMapDataSource(
-              data: _controller.heatmapPoints,
-            ),
-            heatMapOptions: HeatMapOptions(
-              gradient: {
-                0.3:  Colors.green,
-                0.5:  Colors.yellow,
-                0.65: Colors.orange,
-                0.8:  Colors.red,
-                1.0:  Colors.deepOrange,
-              },
-              minOpacity: 0.0,
-              radius: 40.0,
-              blurFactor: 0.55,
-              layerOpacity: 0.85,
-            ),
+          CircleLayer(
+            circles: _controller.heatmapPoints.map((p) => CircleMarker(
+              point: p.latLng,
+              radius: 150 + (p.intensity * 250),
+              useRadiusInMeter: true,
+              color: _heatmapColor(p.intensity).withValues(
+                  alpha: 0.15 + (p.intensity * 0.25)),
+              borderStrokeWidth: 0,
+            )).toList(),
           ),
 
         // ── Linhas de tráfego estilo Google Maps ──────────────────────────
